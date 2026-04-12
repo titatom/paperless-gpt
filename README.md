@@ -258,29 +258,32 @@ services:
 
 #### Unraid Community Apps
 
-> **Important — fork image location**
+> **Important — use the full GHCR image path**
 >
-> This is a fork of `icereed/paperless-gpt`. Images built from this fork are published to the **GitHub Container Registry (GHCR)** only — they are **not** pushed to Docker Hub. The image name `titatom/paperless-gpt` does not exist on Docker Hub and will result in:
+> This is a fork of `icereed/paperless-gpt`. Images are published to the **GitHub Container Registry (GHCR)** only — they are **not** on Docker Hub.
 >
-> ```
-> docker: Error response from daemon: pull access denied for titatom/paperless-gpt,
-> repository does not exist or may require 'docker login': denied
-> ```
+> Two common errors and their fixes:
 >
-> **Always use the full GHCR path as the Docker image name:**
+> | Error | Cause | Fix |
+> |-------|-------|-----|
+> | `pull access denied for titatom/paperless-gpt` | Bare name resolves to Docker Hub, which has no such image | Use the full GHCR URL below |
+> | `Head "https://ghcr.io/v2/titatom/paperless-gpt/manifests/latest": denied` | Package was private (GitHub's default for newly created packages) | Fixed automatically by CI on the next push to `main`; or make it public manually (see below) |
+>
+> **Always use this as the Docker image / repository field:**
 >
 > ```
 > ghcr.io/titatom/paperless-gpt:latest
 > ```
 >
-> **Unraid setup:**
+> **Unraid setup steps:**
 >
-> 1. In the Unraid Docker tab, click **Add Container** (or edit the existing one).
-> 2. Set the **Repository** field to:
->    ```
->    ghcr.io/titatom/paperless-gpt:latest
->    ```
-> 3. If you previously had `titatom/paperless-gpt:latest` as the image, update it to the full GHCR path above and re-pull.
+> 1. In the Unraid Docker tab, click **Add Container** (or edit the existing container).
+> 2. Set the **Repository** field to `ghcr.io/titatom/paperless-gpt:latest`.
+> 3. Save and start — no registry login is needed (the image is public).
+>
+> **If you still get a `denied` error after updating the image name**, the GHCR package may not have been made public yet. Go to:
+> [`https://github.com/users/titatom/packages/container/paperless-gpt/settings`](https://github.com/users/titatom/packages/container/paperless-gpt/settings)
+> and change **Package visibility** to **Public**. This is done automatically by the CI pipeline after each push to `main`.
 >
 > Alternatively, use the upstream image from Docker Hub if you do not need the changes in this fork:
 > ```
