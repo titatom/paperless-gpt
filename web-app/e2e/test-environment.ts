@@ -66,7 +66,8 @@ export async function setupTestEnvironment(config?: TestEnvironmentConfig): Prom
       PAPERLESS_DBPASS: 'paperless'
     })
     .withExposedPorts(paperlessPort)
-    .withWaitStrategy(Wait.forHttp('/api/', paperlessPort))
+    .withStartupTimeout(300_000)
+    .withWaitStrategy(Wait.forHttp('/api/', paperlessPort).withStartupTimeout(300_000))
     .start();
 
   const mappedPort = paperlessNgx.getMappedPort(paperlessPort);
@@ -142,7 +143,8 @@ export async function setupTestEnvironment(config?: TestEnvironmentConfig): Prom
     .withNetwork(network)
     .withEnvironment(baseEnvironment)
     .withExposedPorts(gptPort)
-    .withWaitStrategy(Wait.forHttp('/', gptPort))
+    .withStartupTimeout(120_000)
+    .withWaitStrategy(Wait.forLogMessage('Server started on interface').withStartupTimeout(120_000))
     .start();
   console.log('Paperless-gpt container started');
 

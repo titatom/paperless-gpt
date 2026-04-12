@@ -8,6 +8,9 @@ const __dirname = dirname(__filename);
 let testEnv: TestEnvironment;
 let page: Page;
 
+// Skip all tests in this file if OPENAI_API_KEY is not provided
+test.skip(!process.env.OPENAI_API_KEY, 'OPENAI_API_KEY not provided');
+
 test.beforeAll(async () => {
   testEnv = await setupTestEnvironment();
 });

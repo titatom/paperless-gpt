@@ -6,7 +6,7 @@ dotenv.config({ path: '.env.test' });
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 300000, // 5 minutes - increased for OCR processing with multiple providers
+  timeout: 600000, // 10 minutes - Paperless-ngx container startup can take up to 5 minutes
   expect: {
     timeout: 10000,
   },

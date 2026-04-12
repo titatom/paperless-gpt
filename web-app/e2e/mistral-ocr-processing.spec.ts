@@ -87,6 +87,9 @@ function displayOCRComparison(
   console.log('='.repeat(60));
 }
 
+// Skip all tests in this file if MISTRAL_API_KEY is not provided
+test.skip(!process.env.MISTRAL_API_KEY, 'MISTRAL_API_KEY not provided');
+
 test.beforeAll(async () => {
   testEnv = await setupTestEnvironment({
     // Override default configuration for Mistral OCR
@@ -106,12 +109,6 @@ test.beforeEach(async ({ page: testPage }) => {
 });
 
 test('should process multi-page PDF with Mistral OCR using whole_pdf mode', async () => {
-  // Skip test if MISTRAL_API_KEY is not provided
-  if (!process.env.MISTRAL_API_KEY) {
-    console.log('Skipping Mistral OCR test - MISTRAL_API_KEY not provided');
-    return;
-  }
-
   const paperlessNgxPort = testEnv.paperlessNgx.getMappedPort(PORTS.paperlessNgx);
   const paperlessGptPort = testEnv.paperlessGpt.getMappedPort(PORTS.paperlessGpt);
   const credentials = { username: 'admin', password: 'admin' };
