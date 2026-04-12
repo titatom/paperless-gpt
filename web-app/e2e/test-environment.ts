@@ -144,7 +144,7 @@ export async function setupTestEnvironment(config?: TestEnvironmentConfig): Prom
     .withEnvironment(baseEnvironment)
     .withExposedPorts(gptPort)
     .withStartupTimeout(120_000)
-    .withWaitStrategy(Wait.forHttp('/', gptPort).withStartupTimeout(120_000))
+    .withWaitStrategy(Wait.forLogMessage('Server started on interface').withStartupTimeout(120_000))
     .start();
   console.log('Paperless-gpt container started');
 
