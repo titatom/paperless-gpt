@@ -200,6 +200,11 @@ const CustomFieldsEditor: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 h-full">
             <fieldset disabled={!settings.custom_fields_enable} className="disabled:opacity-50">
               <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-300">Fields to process:</h2>
+              {settings.custom_fields_enable && settings.custom_fields_selected_ids.length === 0 && (
+                <div className="mb-4 px-4 py-3 bg-yellow-100 dark:bg-yellow-900 border border-yellow-400 dark:border-yellow-600 text-yellow-800 dark:text-yellow-200 rounded" role="alert">
+                  No custom fields selected. Select at least one field below for automatic generation to work.
+                </div>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {customFields.map((field) => (
                   <div key={field.id} className="flex items-center">

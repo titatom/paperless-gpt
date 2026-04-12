@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -558,35 +559,38 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 			var suggestedCreatedDate string
 			var suggestedCustomFields []CustomFieldSuggestion
 
+			// Each goroutine uses its own local err to avoid races on the shared outer variable.
+			var gerr error
+
 			if suggestionRequest.GenerateTitles {
-				suggestedTitle, err = app.getSuggestedTitle(ctx, content, suggestedTitle, docLogger)
-				if err != nil {
+				suggestedTitle, gerr = app.getSuggestedTitle(ctx, content, suggestedTitle, docLogger)
+				if gerr != nil {
 					mu.Lock()
-					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, err))
+					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
 					mu.Unlock()
-					docLogger.Errorf("Error processing document %d: %v", documentID, err)
+					docLogger.Errorf("Error processing document %d: %v", documentID, gerr)
 					return
 				}
 			}
 
 			if suggestionRequest.GenerateTags {
-				suggestedTags, err = app.getSuggestedTags(ctx, content, suggestedTitle, availableTagNames, doc.Tags, docLogger)
-				if err != nil {
+				suggestedTags, gerr = app.getSuggestedTags(ctx, content, suggestedTitle, availableTagNames, doc.Tags, docLogger)
+				if gerr != nil {
 					mu.Lock()
-					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, err))
+					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
 					mu.Unlock()
-					logger.Errorf("Error generating tags for document %d: %v", documentID, err)
+					logger.Errorf("Error generating tags for document %d: %v", documentID, gerr)
 					return
 				}
 			}
 
 			if suggestionRequest.GenerateCorrespondents {
-				suggestedCorrespondent, err = app.getSuggestedCorrespondent(ctx, content, suggestedTitle, availableCorrespondentNames, correspondentBlackList)
-				if err != nil {
+				suggestedCorrespondent, gerr = app.getSuggestedCorrespondent(ctx, content, suggestedTitle, availableCorrespondentNames, correspondentBlackList)
+				if gerr != nil {
 					mu.Lock()
-					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, err))
+					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
 					mu.Unlock()
-					log.Errorf("Error generating correspondents for document %d: %v", documentID, err)
+					log.Errorf("Error generating correspondents for document %d: %v", documentID, gerr)
 					return
 				}
 			}
@@ -595,24 +599,24 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 				if len(availableDocumentTypeNames) == 0 {
 					docLogger.Debug("Document type generation is enabled, but no document types are available in paperless-ngx.")
 				} else {
-					suggestedDocumentType, err = app.getSuggestedDocumentType(ctx, content, suggestedTitle, availableDocumentTypeNames, docLogger)
-					if err != nil {
+					suggestedDocumentType, gerr = app.getSuggestedDocumentType(ctx, content, suggestedTitle, availableDocumentTypeNames, docLogger)
+					if gerr != nil {
 						mu.Lock()
-						errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, err))
+						errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
 						mu.Unlock()
-						log.Errorf("Error generating document type for document %d: %v", documentID, err)
+						log.Errorf("Error generating document type for document %d: %v", documentID, gerr)
 						return
 					}
 				}
 			}
 
 			if suggestionRequest.GenerateCreatedDate {
-				suggestedCreatedDate, err = app.getSuggestedCreatedDate(ctx, content, docLogger)
-				if err != nil {
+				suggestedCreatedDate, gerr = app.getSuggestedCreatedDate(ctx, content, docLogger)
+				if gerr != nil {
 					mu.Lock()
-					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, err))
+					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
 					mu.Unlock()
-					log.Errorf("Error generating createdDate for document %d: %v", documentID, err)
+					log.Errorf("Error generating createdDate for document %d: %v", documentID, gerr)
 					return
 				}
 			}
@@ -625,12 +629,12 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 				if len(selectedIDs) == 0 {
 					log.Warnf("Custom field generation is enabled, but no custom fields are selected in the settings. Please select at least one custom field for this feature to work.")
 				} else {
-					suggestedCustomFields, err = app.getSuggestedCustomFields(ctx, doc, selectedIDs, docLogger)
-					if err != nil {
+					suggestedCustomFields, gerr = app.getSuggestedCustomFields(ctx, doc, selectedIDs, docLogger)
+					if gerr != nil {
 						mu.Lock()
-						errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, err))
+						errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
 						mu.Unlock()
-						log.Errorf("Error generating custom fields for document %d: %v", documentID, err)
+						log.Errorf("Error generating custom fields for document %d: %v", documentID, gerr)
 						return
 					}
 				}
@@ -708,7 +712,7 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 	wg.Wait()
 
 	if len(errorsList) > 0 {
-		return nil, errorsList[0] // Return the first error encountered
+		return nil, errors.Join(errorsList...)
 	}
 
 	return documentSuggestions, nil

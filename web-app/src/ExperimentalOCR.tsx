@@ -32,6 +32,9 @@ const ExperimentalOCR: React.FC = () => {
   const [reOcrErrors, setReOcrErrors] = useState<{ [pageIdx: number]: string }>({});
   const [reOcrAbortControllers, setReOcrAbortControllers] = useState<{ [pageIdx: number]: AbortController | null }>({});
 
+  // Tracks whether the current polling loop is still active; incrementing it cancels the old loop.
+  const pollGenerationRef = useRef(0);
+
   const stopOCRJob = async () => {
     if (!jobId) return;
     try {
@@ -66,6 +69,9 @@ const ExperimentalOCR: React.FC = () => {
   }, [documentId]);
 
   const submitOCRJob = async () => {
+    // Cancel any existing polling loop before starting a new job.
+    pollGenerationRef.current += 1;
+
     setError(null);
     setMessage(null);
     setJobId('');
@@ -91,11 +97,14 @@ const ExperimentalOCR: React.FC = () => {
     }
   };
 
-  const checkJobStatus = async () => {
-    if (!jobId) return;
+  const checkJobStatus = useCallback(async (generation: number, currentJobId: string) => {
+    // If the generation has advanced, this polling loop is stale — stop.
+    if (generation !== pollGenerationRef.current || !currentJobId) return;
 
     try {
-      const response = await axios.get(`./api/jobs/ocr/${jobId}`);
+      const response = await axios.get(`./api/jobs/ocr/${currentJobId}`);
+      if (generation !== pollGenerationRef.current) return;
+
       const newJobStatus = mapJobStatus(response.data.status);
       setJobStatus(newJobStatus);
       const newPagesDone = response.data.pages_done;
@@ -122,13 +131,14 @@ const ExperimentalOCR: React.FC = () => {
       } else if (newJobStatus === 'failed') {
         setError(response.data.error);
       } else {
-        setTimeout(() => checkJobStatus(), refreshInterval);
+        setTimeout(() => checkJobStatus(generation, currentJobId), refreshInterval);
       }
     } catch (err) {
       console.error(err);
       setError('Failed to check job status.');
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchPerPageResults]);
 
   const handleSaveContent = async () => {
     setSaving(true);
@@ -223,7 +233,7 @@ const ExperimentalOCR: React.FC = () => {
   useEffect(() => {
     if (jobId) {
       lastFetchedPagesDoneRef.current = 0;
-      checkJobStatus();
+      checkJobStatus(pollGenerationRef.current, jobId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);

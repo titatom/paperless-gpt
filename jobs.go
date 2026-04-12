@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"os"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -39,24 +37,11 @@ type JobStore struct {
 }
 
 var (
-	logger = logrus.New()
-
 	jobStore = &JobStore{
 		jobs: make(map[string]*Job),
 	}
 	jobQueue = make(chan *Job, 100) // Buffered channel with capacity of 100 jobs
 )
-
-func init() {
-
-	// Initialize logger
-	logger.SetOutput(os.Stdout)
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-	logger.SetLevel(logrus.InfoLevel)
-	logger.WithField("prefix", "OCR_JOB")
-}
 
 func generateJobID() string {
 	return uuid.New().String()
@@ -67,7 +52,7 @@ func (store *JobStore) addJob(job *Job) {
 	defer store.Unlock()
 	job.PagesDone = 0 // Initialize PagesDone to 0
 	store.jobs[job.ID] = job
-	logger.Infof("Job added: %v", job)
+	log.Infof("Job added: %v", job)
 }
 
 func (store *JobStore) getJob(jobID string) (*Job, bool) {
@@ -102,7 +87,7 @@ func (store *JobStore) updateJobStatus(jobID, status, result string) {
 			job.Result = result
 		}
 		job.UpdatedAt = time.Now()
-		logger.Infof("Job status updated: %v", job)
+		log.Infof("Job status updated: %v", job)
 	}
 }
 
@@ -112,20 +97,46 @@ func (store *JobStore) updatePagesDone(jobID string, pagesDone int) {
 	if job, exists := store.jobs[jobID]; exists {
 		job.PagesDone = pagesDone
 		job.UpdatedAt = time.Now()
-		logger.Infof("Job pages done updated: %v", job)
+		log.Infof("Job pages done updated: %v", job)
+	}
+}
+
+// jobTTL is how long completed/failed/cancelled jobs are kept in memory before eviction.
+const jobTTL = 2 * time.Hour
+
+// evictOldJobs removes terminal jobs that are older than jobTTL.
+func (store *JobStore) evictOldJobs() {
+	store.Lock()
+	defer store.Unlock()
+	cutoff := time.Now().Add(-jobTTL)
+	for id, job := range store.jobs {
+		terminal := job.Status == "completed" || job.Status == "failed" || job.Status == "cancelled"
+		if terminal && job.UpdatedAt.Before(cutoff) {
+			delete(store.jobs, id)
+			log.Debugf("Evicted old job %s (status: %s, updated: %s)", id, job.Status, job.UpdatedAt)
+		}
 	}
 }
 
 func startWorkerPool(app *App, numWorkers int) {
 	for i := 0; i < numWorkers; i++ {
 		go func(workerID int) {
-			logger.Infof("Worker %d started", workerID)
+			log.Infof("Worker %d started", workerID)
 			for job := range jobQueue {
-				logger.Infof("Worker %d processing job: %s", workerID, job.ID)
+				log.Infof("Worker %d processing job: %s", workerID, job.ID)
 				processJob(app, job)
 			}
 		}(i)
 	}
+
+	// Periodically evict old terminal jobs to prevent unbounded memory growth.
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			jobStore.evictOldJobs()
+		}
+	}()
 }
 
 func processJob(app *App, job *Job) {
@@ -144,7 +155,7 @@ func processJob(app *App, job *Job) {
 
 	// Delete old OCR page results for this document before starting new OCR
 	if err := DeleteOcrPageResults(app.Database, job.DocumentID); err != nil {
-		logger.Errorf("Failed to delete old OCR page results for document %d: %v", job.DocumentID, err)
+		log.Errorf("Failed to delete old OCR page results for document %d: %v", job.DocumentID, err)
 		// Continue processing even if deletion fails
 	}
 
@@ -164,19 +175,19 @@ func processJob(app *App, job *Job) {
 	if err != nil {
 		if jobCtx.Err() == context.Canceled {
 			jobStore.updateJobStatus(job.ID, "cancelled", "Job cancelled by user")
-			logger.Infof("Job cancelled: %s", job.ID)
+			log.Infof("Job cancelled: %s", job.ID)
 		} else {
-			logger.Errorf("Error processing document OCR for job %s: %v", job.ID, err)
+			log.Errorf("Error processing document OCR for job %s: %v", job.ID, err)
 			jobStore.updateJobStatus(job.ID, "failed", err.Error())
 		}
 		return
 	}
 	if processedDoc == nil {
-		logger.Infof("OCR processing skipped for job %s (document %d)", job.ID, job.DocumentID)
+		log.Infof("OCR processing skipped for job %s (document %d)", job.ID, job.DocumentID)
 		jobStore.updateJobStatus(job.ID, "completed", "Skipped (already processed or other reason)")
 		return
 	}
 
 	jobStore.updateJobStatus(job.ID, "completed", processedDoc.Text)
-	logger.Infof("Job completed: %s", job.ID)
+	log.Infof("Job completed: %s", job.ID)
 }

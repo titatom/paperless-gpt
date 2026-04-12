@@ -169,10 +169,10 @@ func (client *PaperlessClient) GetAllTags(ctx context.Context) (map[string]int, 
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			return nil, fmt.Errorf("error fetching tags: %d, %s", resp.StatusCode, string(bodyBytes))
 		}
 
@@ -185,6 +185,7 @@ func (client *PaperlessClient) GetAllTags(ctx context.Context) (map[string]int, 
 		}
 
 		err = json.NewDecoder(resp.Body).Decode(&tagsResponse)
+		resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}
@@ -1253,10 +1254,10 @@ func (client *PaperlessClient) GetCustomFields(ctx context.Context) ([]CustomFie
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			return nil, fmt.Errorf("error fetching custom fields: %d, %s", resp.StatusCode, string(bodyBytes))
 		}
 
@@ -1266,6 +1267,7 @@ func (client *PaperlessClient) GetCustomFields(ctx context.Context) ([]CustomFie
 		}
 
 		err = json.NewDecoder(resp.Body).Decode(&response)
+		resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}

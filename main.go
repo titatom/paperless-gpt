@@ -26,6 +26,8 @@ import (
 	"github.com/tmc/langchaingo/llms/mistral"
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/llms/openai"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"gorm.io/gorm"
 )
 
@@ -643,15 +645,17 @@ func validateOrDefaultEnvVars() {
 		log.Fatal("Please set the LLM_MODEL environment variable.")
 	}
 
-	if llmProvider == "mistral" {
+	if llmProvider == "mistral" || visionLlmProvider == "mistral" {
 		if os.Getenv("MISTRAL_API_KEY") == "" {
 			log.Fatal("Please set the MISTRAL_API_KEY environment variable for Mistral provider.")
 		}
-	} else if llmProvider == "anthropic" || visionLlmProvider == "anthropic" {
+	}
+	if llmProvider == "anthropic" || visionLlmProvider == "anthropic" {
 		if os.Getenv("ANTHROPIC_API_KEY") == "" {
 			log.Fatal("Please set the ANTHROPIC_API_KEY environment variable for Anthropic provider.")
 		}
-	} else if llmProvider == "openai" || visionLlmProvider == "openai" {
+	}
+	if llmProvider == "openai" || visionLlmProvider == "openai" {
 		if openaiAPIKey == "" {
 			log.Fatal("Please set the OPENAI_API_KEY environment variable for OpenAI provider.")
 		}
@@ -797,7 +801,7 @@ func getLikelyLanguage() string {
 	if likelyLanguage == "" {
 		likelyLanguage = "English"
 	}
-	return strings.Title(strings.ToLower(likelyLanguage))
+	return cases.Title(language.Und).String(strings.ToLower(likelyLanguage))
 }
 
 // loadTemplates loads templates from files, copying from defaults if they don't exist
@@ -1145,11 +1149,7 @@ func createCustomHTTPClient() *http.Client {
 		},
 	}
 
-	// Create custom client with the transport
-	httpClient := http.DefaultClient
-	httpClient.Transport = customTransport
-
-	return httpClient
+	return &http.Client{Transport: customTransport}
 }
 
 // headerTransport is a custom http.RoundTripper that adds custom headers to requests

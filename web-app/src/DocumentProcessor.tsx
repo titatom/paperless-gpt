@@ -59,6 +59,7 @@ interface CustomField {
 
 const DocumentProcessor: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<number[]>([]);
   const [suggestions, setSuggestions] = useState<DocumentSuggestion[]>([]);
   const [availableTags, setAvailableTags] = useState<TagOption[]>([]);
   const [allCustomFields, setAllCustomFields] = useState<CustomField[]>([]);
@@ -75,6 +76,15 @@ const DocumentProcessor: React.FC = () => {
   const [generateCustomFields, setGenerateCustomFields] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const handleSelectDocument = (docId: number) => {
+    setSelectedDocuments((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
+    );
+  };
+
+  const handleSelectAll = () => setSelectedDocuments(documents.map((d) => d.id));
+  const handleSelectNone = () => setSelectedDocuments([]);
+
   // Custom hook to fetch initial data
   const fetchInitialData = useCallback(async () => {
     try {
@@ -88,6 +98,7 @@ const DocumentProcessor: React.FC = () => {
       setFilterTag(filterTagRes.data.tag);
       setAllCustomFields(customFieldsRes.data || []);
       setDocuments(documentsRes.data);
+      setSelectedDocuments(documentsRes.data.map((d: Document) => d.id));
       const tags = Object.keys(tagsRes.data).map((tag) => ({
         id: tag,
         name: tag,
@@ -109,8 +120,14 @@ const DocumentProcessor: React.FC = () => {
     setProcessing(true);
     setError(null);
     try {
+      const docsToProcess = documents.filter((d) => selectedDocuments.includes(d.id));
+      if (docsToProcess.length === 0) {
+        setError("No documents selected. Please select at least one document to process.");
+        setProcessing(false);
+        return;
+      }
       const requestPayload: GenerateSuggestionsRequest = {
-        documents,
+        documents: docsToProcess,
         generate_titles: generateTitles,
         generate_tags: generateTags,
         generate_correspondents: generateCorrespondents,
@@ -252,6 +269,7 @@ const DocumentProcessor: React.FC = () => {
     try {
       const { data } = await axios.get<Document[]>("./api/documents");
       setDocuments(data);
+      setSelectedDocuments(data.map((d: Document) => d.id));
     } catch (err) {
       console.error("Error reloading documents:", err);
       setError("Failed to reload documents.");
@@ -266,12 +284,15 @@ const DocumentProcessor: React.FC = () => {
         setError(null);
         try {
           const { data } = await axios.get<Document[]>("./api/documents");
-          setDocuments(data);
+          if (data.length > 0) {
+            setDocuments(data);
+            setSelectedDocuments(data.map((d: Document) => d.id));
+          }
         } catch (err) {
           console.error("Error reloading documents:", err);
           setError("Failed to reload documents.");
         }
-      }, 500);
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [documents]);
@@ -305,7 +326,11 @@ const DocumentProcessor: React.FC = () => {
           processing={processing}
         />
       ) : suggestions.length === 0 ? (
-        <DocumentsToProcess documents={documents}>
+        <DocumentsToProcess
+          documents={documents}
+          selectedDocuments={selectedDocuments}
+          onSelectDocument={handleSelectDocument}
+        >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200">Documents to Process</h2>
             <div className="flex space-x-2">
@@ -318,12 +343,16 @@ const DocumentProcessor: React.FC = () => {
               </button>
               <button
                 onClick={handleProcessDocuments}
-                disabled={processing}
-                className="bg-blue-600 text-white dark:bg-blue-800 dark:text-gray-200 px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-900 focus:outline-none"
+                disabled={processing || selectedDocuments.length === 0}
+                className="bg-blue-600 text-white dark:bg-blue-800 dark:text-gray-200 px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-900 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {processing ? "Processing..." : "Generate Suggestions"}
+                {processing ? "Processing..." : `Generate Suggestions (${selectedDocuments.length})`}
               </button>
             </div>
+          </div>
+          <div className="flex space-x-2 mb-4">
+            <button onClick={handleSelectAll} className="text-sm bg-gray-200 dark:bg-gray-600 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-500">Select All</button>
+            <button onClick={handleSelectNone} className="text-sm bg-gray-200 dark:bg-gray-600 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-500">Select None</button>
           </div>
 
           <div className="flex space-x-4 mb-6">

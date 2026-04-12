@@ -136,9 +136,11 @@ const History: React.FC = () => {
           </div>
           <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
             <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-              <span>
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} results
-              </span>
+              {totalItems > 0 && (
+                <span>
+                  Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} results
+                </span>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <button

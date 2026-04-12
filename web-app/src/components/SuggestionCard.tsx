@@ -87,8 +87,8 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             }))}
             onAdd={(tag) =>
               onTagAddition(suggestion.id, {
-                id: String(tag.label),
-                name: String(tag.value),
+                id: String(tag.value),
+                name: String(tag.label),
               })
             }
             onDelete={(index) => onTagDeletion(suggestion.id, index)}
