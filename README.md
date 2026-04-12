@@ -146,9 +146,12 @@ services:
     # ... (your existing paperless-ngx config)
 
   paperless-gpt:
-    # Use one of these image sources:
-    image: icereed/paperless-gpt:latest # Docker Hub
-    # image: ghcr.io/icereed/paperless-gpt:latest  # GitHub Container Registry
+    # This fork's image is published to GitHub Container Registry (GHCR) only.
+    # Do NOT use "titatom/paperless-gpt:latest" — that refers to Docker Hub and does not exist.
+    image: ghcr.io/titatom/paperless-gpt:latest
+    # For the upstream image instead:
+    # image: icereed/paperless-gpt:latest          # Docker Hub (upstream)
+    # image: ghcr.io/icereed/paperless-gpt:latest  # GHCR (upstream)
     environment:
       PAPERLESS_BASE_URL: "http://paperless-ngx:8000"
       PAPERLESS_API_TOKEN: "your_paperless_api_token"
@@ -252,6 +255,37 @@ services:
 ```
 
 **Pro Tip**: Replace placeholders with real values and read the logs if something looks off.
+
+#### Unraid Community Apps
+
+> **Important — fork image location**
+>
+> This is a fork of `icereed/paperless-gpt`. Images built from this fork are published to the **GitHub Container Registry (GHCR)** only — they are **not** pushed to Docker Hub. The image name `titatom/paperless-gpt` does not exist on Docker Hub and will result in:
+>
+> ```
+> docker: Error response from daemon: pull access denied for titatom/paperless-gpt,
+> repository does not exist or may require 'docker login': denied
+> ```
+>
+> **Always use the full GHCR path as the Docker image name:**
+>
+> ```
+> ghcr.io/titatom/paperless-gpt:latest
+> ```
+>
+> **Unraid setup:**
+>
+> 1. In the Unraid Docker tab, click **Add Container** (or edit the existing one).
+> 2. Set the **Repository** field to:
+>    ```
+>    ghcr.io/titatom/paperless-gpt:latest
+>    ```
+> 3. If you previously had `titatom/paperless-gpt:latest` as the image, update it to the full GHCR path above and re-pull.
+>
+> Alternatively, use the upstream image from Docker Hub if you do not need the changes in this fork:
+> ```
+> icereed/paperless-gpt:latest
+> ```
 
 #### Manual Setup
 
