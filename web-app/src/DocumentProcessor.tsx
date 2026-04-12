@@ -68,6 +68,7 @@ const DocumentProcessor: React.FC = () => {
   const [updating, setUpdating] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [paperlessUrl, setPaperlessUrl] = useState<string>("");
   const [generateTitles, setGenerateTitles] = useState(true);
   const [generateTags, setGenerateTags] = useState(true);
   const [generateCorrespondents, setGenerateCorrespondents] = useState(true);
@@ -88,15 +89,17 @@ const DocumentProcessor: React.FC = () => {
   // Custom hook to fetch initial data
   const fetchInitialData = useCallback(async () => {
     try {
-      const [filterTagRes, documentsRes, tagsRes, customFieldsRes] = await Promise.all([
+      const [filterTagRes, documentsRes, tagsRes, customFieldsRes, paperlessUrlRes] = await Promise.all([
         axios.get<{ tag: string }>("./api/filter-tag"),
         axios.get<Document[]>("./api/documents"),
         axios.get<Record<string, number>>("./api/tags"),
         axios.get<CustomField[]>('./api/custom_fields'),
+        axios.get<{ url: string }>("./api/paperless-url"),
       ]);
 
       setFilterTag(filterTagRes.data.tag);
       setAllCustomFields(customFieldsRes.data || []);
+      setPaperlessUrl(paperlessUrlRes.data.url || "");
       setDocuments(documentsRes.data);
       setSelectedDocuments(documentsRes.data.map((d: Document) => d.id));
       const tags = Object.keys(tagsRes.data).map((tag) => ({
@@ -263,6 +266,21 @@ const DocumentProcessor: React.FC = () => {
     setSuggestions([]);
   };
 
+  const handleDeleteDocument = async (docId: number) => {
+    try {
+      await axios.delete(`./api/documents/${docId}`);
+      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      setSelectedDocuments((prev) => prev.filter((id) => id !== docId));
+      setSuggestions((prev) => {
+        const next = prev.filter((s) => s.id !== docId);
+        return next;
+      });
+    } catch (err) {
+      console.error("Error deleting document:", err);
+      setError("Failed to delete document.");
+    }
+  };
+
   const reloadDocuments = async () => {
     setLoading(true);
     setError(null);
@@ -330,6 +348,8 @@ const DocumentProcessor: React.FC = () => {
           documents={documents}
           selectedDocuments={selectedDocuments}
           onSelectDocument={handleSelectDocument}
+          paperlessUrl={paperlessUrl}
+          onDeleteDocument={handleDeleteDocument}
         >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200">Documents to Process</h2>
@@ -426,6 +446,8 @@ const DocumentProcessor: React.FC = () => {
           onBack={resetSuggestions}
           onUpdate={handleUpdateDocuments}
           updating={updating}
+          paperlessUrl={paperlessUrl}
+          onDeleteDocument={handleDeleteDocument}
         />
       )}
 

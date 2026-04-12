@@ -15,6 +15,8 @@ interface SuggestionsReviewProps {
   onBack: () => void;
   onUpdate: () => void;
   updating: boolean;
+  paperlessUrl?: string;
+  onDeleteDocument?: (documentId: number) => void;
 }
 
 const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
@@ -30,6 +32,8 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
   onBack,
   onUpdate,
   updating,
+  paperlessUrl,
+  onDeleteDocument,
 }) => (
   <section className="suggestions-review">
     <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-6">
@@ -48,6 +52,8 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
           onDocumentTypeChange={onDocumentTypeChange}
           onCreatedDateChange={onCreatedDateChange}
           onCustomFieldSuggestionToggle={onCustomFieldSuggestionToggle}
+          paperlessUrl={paperlessUrl}
+          onDelete={onDeleteDocument}
         />
       ))}
     </div>

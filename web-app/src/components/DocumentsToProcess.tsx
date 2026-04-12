@@ -10,6 +10,8 @@ export interface DocumentsToProcessProps {
   // Optional prop for grid layout
   gridCols?: string;
   children?: React.ReactNode;
+  paperlessUrl?: string;
+  onDeleteDocument?: (documentId: number) => void;
 }
 
 const DocumentsToProcess: React.FC<DocumentsToProcessProps> = ({
@@ -18,6 +20,8 @@ const DocumentsToProcess: React.FC<DocumentsToProcessProps> = ({
   onSelectDocument,
   gridCols = "1 md:grid-cols-2",
   children,
+  paperlessUrl,
+  onDeleteDocument,
 }) => (
   <section>
     {children}
@@ -28,6 +32,8 @@ const DocumentsToProcess: React.FC<DocumentsToProcessProps> = ({
           document={doc}
           isSelected={selectedDocuments?.includes(doc.id)}
           onSelect={() => onSelectDocument && onSelectDocument(doc.id)}
+          paperlessUrl={paperlessUrl}
+          onDelete={onDeleteDocument}
         />
       ))}
     </div>

@@ -310,6 +310,22 @@ func (app *App) stopOCRJobHandler(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// deleteDocumentHandler handles DELETE /api/documents/:id — permanently removes a document from Paperless-ngx
+func (app *App) deleteDocumentHandler(c *gin.Context) {
+	id := c.Param("id")
+	parsedID, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid document ID"})
+		return
+	}
+	if err := app.Client.DeleteDocument(c.Request.Context(), parsedID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error deleting document: %v", err)})
+		log.Errorf("Error deleting document %d: %v", parsedID, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 // getDocumentHandler handles the retrieval of a document by its ID
 func (app *App) getDocumentHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
