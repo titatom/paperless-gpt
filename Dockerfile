@@ -2,6 +2,7 @@
 ARG VERSION=docker-dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
+ARG REPO_URL=https://github.com/titatom/paperless-gpt
 
 # Stage 1: Build Vite frontend
 FROM docker.io/node:24-alpine AS frontend
@@ -83,6 +84,20 @@ RUN CGO_ENABLED=1 GOMAXPROCS=$(nproc) go build -tags musl -o paperless-gpt .
 
 # Stage 3: Create a lightweight image with just the binary
 FROM docker.io/alpine:3.23.0
+
+# Import top-level ARGs into this stage so LABEL can use them.
+# The org.opencontainers.image.source label links this GHCR package to its
+# GitHub repository, which makes GitHub automatically inherit the repository's
+# public/private visibility — allowing anonymous pulls from public repos.
+ARG REPO_URL
+ARG VERSION
+ARG COMMIT
+ARG BUILD_DATE
+
+LABEL org.opencontainers.image.source="${REPO_URL}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
 
 ENV GIN_MODE=release
 

@@ -178,6 +178,7 @@ jobs:
             VERSION=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.repository.pushed_at }}
+            REPO_URL=https://github.com/${{ github.repository }}
       - name: Set image tag output
         id: set_image_tag
         run: echo "image_tag=${TAGS}" >> $GITHUB_OUTPUT
@@ -253,6 +254,7 @@ jobs:
             VERSION=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.repository.pushed_at }}
+            REPO_URL=https://github.com/${{ github.repository }}
       - name: Export digest for arm64
         run: |
           mkdir -p ${{ runner.temp }}/digests
@@ -359,6 +361,33 @@ jobs:
               echo "Inspecting GHCR latest manifest:"
               docker buildx imagetools inspect ${GHCR_REPO}:latest
             fi
+          fi
+      - name: Make GHCR package public
+        # GHCR packages are private by default. Setting the package to public
+        # allows anonymous pulls (required for Unraid and other Docker hosts that
+        # don't authenticate against GHCR). This step is only meaningful for
+        # user-owned packages (not org packages, which use a different API path).
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PACKAGE_NAME="paperless-gpt"
+          OWNER="${{ github.repository_owner }}"
+          echo "Setting GHCR package ${OWNER}/${PACKAGE_NAME} to public..."
+          HTTP_STATUS=$(curl -s -o /tmp/ghcr_response.json -w "%{http_code}" \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/user/packages/container/${PACKAGE_NAME}" \
+            -d '{"visibility":"public"}')
+          cat /tmp/ghcr_response.json
+          if [[ "${HTTP_STATUS}" == "200" ]]; then
+            echo "Package successfully set to public."
+          else
+            echo "Warning: could not set package to public (HTTP ${HTTP_STATUS})."
+            echo "You may need to do this manually at:"
+            echo "  https://github.com/users/${OWNER}/packages/container/${PACKAGE_NAME}/settings"
           fi
 
   e2e-tests:
