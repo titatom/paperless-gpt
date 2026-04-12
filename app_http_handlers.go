@@ -382,9 +382,15 @@ func (app *App) reOCRPageHandler(c *gin.Context) {
 		return
 	}
 
-	// Download all images for the document, but only process the requested page
-	imagePaths, _, err := app.Client.DownloadDocumentAsImages(c.Request.Context(), parsedID, limitOcrPages)
-	if err != nil || pageIdx < 0 || pageIdx >= len(imagePaths) {
+	// Validate page index before downloading
+	if pageIdx < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page index"})
+		return
+	}
+
+	// Only download up to the needed page (pageIdx is 0-based, so limit = pageIdx+1).
+	imagePaths, _, err := app.Client.DownloadDocumentAsImages(c.Request.Context(), parsedID, pageIdx+1)
+	if err != nil || pageIdx >= len(imagePaths) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page index or failed to download images"})
 		return
 	}

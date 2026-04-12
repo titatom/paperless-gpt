@@ -137,12 +137,6 @@ func (app *App) ProcessDocumentOCR(ctx context.Context, documentID int, options 
 	var imagePaths []string
 	var ocrResults []*ocr.OCRResult
 
-	// Default process mode to app's ocrProcessMode if not set in options
-	processMode = options.ProcessMode
-	if processMode == "" {
-		processMode = app.ocrProcessMode
-	}
-
 	if processMode == "whole_pdf" {
 		// Process the entire PDF in one go, skipping the splitting step
 		var pdfBytes []byte

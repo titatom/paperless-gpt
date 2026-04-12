@@ -245,17 +245,10 @@ func (app *App) processAutoOcrTagDocuments(ctx context.Context) (int, error) {
 			OriginalDocument: document,
 			SuggestedContent: processedDoc.Text,
 			RemoveTags:       []string{autoOcrTag},
-			// Add OCR complete tag if tagging is enabled and PDF wasn't uploaded (upload handles tagging)
-			AddTags: func() []string {
-				if app.pdfOCRTagging && !options.UploadPDF {
-					return []string{app.pdfOCRCompleteTag}
-				}
-				return nil
-			}(),
 		}
 
-		if (app.pdfOCRTagging) && app.pdfOCRCompleteTag != "" {
-			// Add the OCR complete tag if tagging is enabled
+		if app.pdfOCRTagging && app.pdfOCRCompleteTag != "" {
+			// Merge the OCR complete tag into the existing tags
 			documentSuggestion.SuggestedTags = []string{app.pdfOCRCompleteTag}
 			documentSuggestion.KeepOriginalTags = true
 			docLogger.Infof("Adding OCR complete tag '%s'", app.pdfOCRCompleteTag)
