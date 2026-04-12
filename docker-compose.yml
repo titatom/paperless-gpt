@@ -1,8 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/titatom/paperless-gpt:latest
     ports:
       - "8080:8080"
     env_file:
