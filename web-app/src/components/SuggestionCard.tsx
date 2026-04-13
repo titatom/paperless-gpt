@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
+import ArrowTopRightOnSquareIcon from "@heroicons/react/24/outline/ArrowTopRightOnSquareIcon";
+import TrashIcon from "@heroicons/react/24/outline/TrashIcon";
 import { ReactTags } from "react-tag-autocomplete";
 import { DocumentSuggestion, TagOption } from "../DocumentProcessor";
 
@@ -12,6 +14,8 @@ interface SuggestionCardProps {
   onDocumentTypeChange: (docId: number, documentType: string) => void;
   onCreatedDateChange: (docId: number, createdDate: string) => void;
   onCustomFieldSuggestionToggle: (docId: number, fieldId: number) => void;
+  paperlessUrl?: string;
+  onDelete?: (documentId: number) => void;
 }
 
 const SuggestionCard: React.FC<SuggestionCardProps> = ({
@@ -24,11 +28,67 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   onDocumentTypeChange,
   onCreatedDateChange,
   onCustomFieldSuggestionToggle,
+  paperlessUrl,
+  onDelete,
 }) => {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const sortedAvailableTags = availableTags.sort((a, b) => a.name.localeCompare(b.name));
   const document = suggestion.original_document;
+
+  const handleDeleteClick = () => {
+    if (confirmDelete) {
+      onDelete && onDelete(suggestion.id);
+    } else {
+      setConfirmDelete(true);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 shadow-lg shadow-blue-500/50 rounded-md p-4 relative flex flex-col justify-between h-full">
+      <div className="flex items-center gap-1 mb-2">
+        {paperlessUrl && (
+          <a
+            href={`${paperlessUrl}/documents/${suggestion.id}/details`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View in Paperless-ngx"
+            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+          >
+            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+            View
+          </a>
+        )}
+        {onDelete && (
+          confirmDelete ? (
+            <>
+              <button
+                onClick={handleDeleteClick}
+                title="Confirm delete"
+                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                <TrashIcon className="h-3.5 w-3.5" />
+                Sure?
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                title="Cancel"
+                className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleDeleteClick}
+              title="Delete document"
+              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          )
+        )}
+      </div>
       <div className="flex items-center group relative">
         <div className="relative">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
