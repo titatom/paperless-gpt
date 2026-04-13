@@ -106,9 +106,12 @@ type AnalyzeDocumentsRequest struct {
 
 // Settings defines the structure for server-side UI settings
 type Settings struct {
-	CustomFieldsEnable      bool   `json:"custom_fields_enable"`
-	CustomFieldsSelectedIDs []int  `json:"custom_fields_selected_ids"`
-	CustomFieldsWriteMode   string `json:"custom_fields_write_mode"` // "append" or "replace"
+	CustomFieldsEnable           bool   `json:"custom_fields_enable"`
+	CustomFieldsSelectedIDs      []int  `json:"custom_fields_selected_ids"`
+	CustomFieldsWriteMode        string `json:"custom_fields_write_mode"` // "append" or "replace"
+	RestrictTagsToExisting       bool   `json:"restrict_tags_to_existing"`
+	RestrictCorrespondentsToExisting bool `json:"restrict_correspondents_to_existing"`
+	RestrictDocumentTypesToExisting  bool `json:"restrict_document_types_to_existing"`
 }
 
 // DocumentSuggestion is the response payload for /generate-suggestions endpoint and the request payload for /update-documents endpoint (as an array)

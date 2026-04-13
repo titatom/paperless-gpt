@@ -544,12 +544,19 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 			if corrID, exists := availableCorrespondents[document.SuggestedCorrespondent]; exists {
 				updatedFields["correspondent"] = corrID
 			} else {
-				newCorr := instantiateCorrespondent(document.SuggestedCorrespondent)
-				newCorrID, err := client.CreateOrGetCorrespondent(ctx, newCorr)
-				if err != nil {
-					return fmt.Errorf("error creating correspondent '%s': %w", document.SuggestedCorrespondent, err)
+				settingsMutex.RLock()
+				restrictCorrespondents := settings.RestrictCorrespondentsToExisting
+				settingsMutex.RUnlock()
+				if restrictCorrespondents {
+					log.Warnf("Correspondent '%s' not found in existing correspondents and creation is restricted, skipping for document %d", document.SuggestedCorrespondent, documentID)
+				} else {
+					newCorr := instantiateCorrespondent(document.SuggestedCorrespondent)
+					newCorrID, err := client.CreateOrGetCorrespondent(ctx, newCorr)
+					if err != nil {
+						return fmt.Errorf("error creating correspondent '%s': %w", document.SuggestedCorrespondent, err)
+					}
+					updatedFields["correspondent"] = newCorrID
 				}
-				updatedFields["correspondent"] = newCorrID
 			}
 		}
 

@@ -47,9 +47,12 @@ func loadSettings() {
 	// Define default settings
 	loadDefaultSettings := func() {
 		settings = Settings{
-			CustomFieldsEnable:      false,
-			CustomFieldsSelectedIDs: []int{},
-			CustomFieldsWriteMode:   "append",
+			CustomFieldsEnable:               false,
+			CustomFieldsSelectedIDs:          []int{},
+			CustomFieldsWriteMode:            "append",
+			RestrictTagsToExisting:           false,
+			RestrictCorrespondentsToExisting: false,
+			RestrictDocumentTypesToExisting:  false,
 		}
 	}
 
