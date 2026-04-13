@@ -90,13 +90,18 @@ func (app *App) getSuggestedTags(
 	availableTags = removeTagFromList(availableTags, autoTag)
 	availableTags = removeTagFromList(availableTags, autoOcrTag)
 
+	// Determine effective createNewTags value (false if restricted by settings)
+	settingsMutex.RLock()
+	effectiveCreateNewTags := createNewTags && !settings.RestrictTagsToExisting
+	settingsMutex.RUnlock()
+
 	// Get available tokens for content
 	templateData := map[string]interface{}{
 		"Language":       likelyLanguage,
 		"AvailableTags":  availableTags,
 		"OriginalTags":   originalTags,
 		"Title":          suggestedTitle,
-		"CreateNewTags":  createNewTags,
+		"CreateNewTags":  effectiveCreateNewTags,
 	}
 
 	availableTokens, err := getAvailableTokensForContent(tagTemplate, templateData)
@@ -152,8 +157,8 @@ func (app *App) getSuggestedTags(
 	slices.Sort(suggestedTags)
 	suggestedTags = slices.Compact(suggestedTags)
 
-	// Filter out tags that are not in the available tags list (unless CREATE_NEW_TAGS is enabled)
-	if createNewTags {
+	// Filter out tags that are not in the available tags list (unless CREATE_NEW_TAGS is enabled and not restricted by settings)
+	if effectiveCreateNewTags {
 		// When creating new tags is enabled, keep all non-empty suggested tags
 		filteredTags := []string{}
 		for _, tag := range suggestedTags {
