@@ -52,7 +52,7 @@ const ExperimentalOCR: React.FC = () => {
     try {
       await axios.post(`./api/ocr/jobs/${jobId}/stop`);
       setJobStatus('cancelled');
-    } catch (err) {
+    } catch {
       setError('Failed to stop OCR job.');
     }
   };
@@ -149,7 +149,6 @@ const ExperimentalOCR: React.FC = () => {
       console.error(err);
       setError('Failed to check job status.');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPerPageResults]);
 
   const handleSaveContent = async () => {
