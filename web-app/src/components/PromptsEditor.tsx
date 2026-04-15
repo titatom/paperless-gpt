@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 const PromptsEditor: React.FC = () => {
   const [prompts, setPrompts] = useState<Record<string, string>>({});
@@ -39,19 +39,7 @@ const PromptsEditor: React.FC = () => {
     }
   }, [selectedPrompt, prompts]);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const isModS = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
-      if (isModS) {
-        e.preventDefault();
-        if (!isSaving && selectedPrompt) handleSave();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isSaving, selectedPrompt, content]);
-
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!selectedPrompt) return;
 
     setIsSaving(true);
@@ -85,7 +73,19 @@ const PromptsEditor: React.FC = () => {
         setTimeout(() => setError(null), 5000);
       })
       .finally(() => setIsSaving(false));
-  };
+  }, [content, selectedPrompt]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isModS = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
+      if (isModS) {
+        e.preventDefault();
+        if (!isSaving && selectedPrompt) handleSave();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSave, isSaving, selectedPrompt]);
 
   if (isLoading) {
     return <div className="p-4">Loading prompts...</div>;

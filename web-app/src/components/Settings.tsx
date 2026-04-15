@@ -5,16 +5,23 @@ import MetadataRestrictionsEditor from './MetadataRestrictionsEditor';
 
 const Settings: React.FC = () => {
   return (
-    <main className="p-4">
-      <div className="p-6 bg-gray-100 dark:bg-gray-900">
+    <main className="mx-auto max-w-7xl px-6 py-8">
+      <section className="mb-8 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+          Settings
+        </p>
+        <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+          Configure prompts and metadata behavior
+        </h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
+          Update prompt templates, control which metadata values are allowed,
+          and choose how custom fields should be written back to Paperless.
+        </p>
+      </section>
+
+      <div className="space-y-8">
         <PromptsEditor />
-      </div>
-
-      <div className="p-6 bg-gray-100 dark:bg-gray-900">
         <MetadataRestrictionsEditor />
-      </div>
-
-      <div className="p-6 bg-gray-100 dark:bg-gray-900">
         <CustomFieldsEditor />
       </div>
     </main>
