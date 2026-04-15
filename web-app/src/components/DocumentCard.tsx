@@ -26,7 +26,9 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirmDelete) {
-      onDelete && onDelete(document.id);
+      if (onDelete) {
+        onDelete(document.id);
+      }
     } else {
       setConfirmDelete(true);
     }

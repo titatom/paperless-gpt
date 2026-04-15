@@ -40,7 +40,9 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
 
   const handleDeleteClick = () => {
     if (confirmDelete) {
-      onDelete && onDelete(suggestion.id);
+      if (onDelete) {
+        onDelete(suggestion.id);
+      }
     } else {
       setConfirmDelete(true);
     }
