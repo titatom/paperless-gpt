@@ -1,7 +1,13 @@
-import { mdiCogOutline, mdiHistory, mdiHomeOutline, mdiTextBoxSearchOutline, mdiFileChartOutline } from "@mdi/js";
+import {
+  mdiCogOutline,
+  mdiFileChartOutline,
+  mdiHistory,
+  mdiHomeOutline,
+  mdiTextBoxSearchOutline,
+} from "@mdi/js";
 import { Icon } from "@mdi/react";
 import axios from "axios";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import logo from "../assets/logo.svg";
 import "./Sidebar.css";
@@ -12,36 +18,48 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ onSelectPage }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [ocrEnabled, setOcrEnabled] = useState(false);
   const location = useLocation();
 
   const toggleSidebar = () => {
-    setCollapsed(!collapsed);
+    setCollapsed((prev) => !prev);
   };
 
   const handlePageClick = (page: string) => {
     onSelectPage(page);
   };
 
-  // Get whether experimental OCR is enabled
-  const [ocrEnabled, setOcrEnabled] = useState(false);
-  const fetchOcrEnabled = useCallback(async () => {
-    try {
-      const res = await axios.get<{ enabled: boolean }>(
-        "./api/experimental/ocr"
-      );
-      setOcrEnabled(res.data.enabled);
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchOcrEnabled();
-  }, [fetchOcrEnabled]);
+    let isMounted = true;
+
+    const fetchOcrEnabled = async () => {
+      try {
+        const res = await axios.get<{ enabled: boolean }>(
+          "./api/experimental/ocr"
+        );
+        if (isMounted) {
+          setOcrEnabled(res.data.enabled);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    void fetchOcrEnabled();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const menuItems = [
     { name: "home", path: "./", icon: mdiHomeOutline, title: "Home" },
-    { name: "adhoc-analysis", path: "./adhoc-analysis", icon: mdiFileChartOutline, title: "Ad-hoc Analysis" },
+    {
+      name: "adhoc-analysis",
+      path: "./adhoc-analysis",
+      icon: mdiFileChartOutline,
+      title: "Ad-hoc Analysis",
+    },
     { name: "history", path: "./history", icon: mdiHistory, title: "History" },
     { name: "settings", path: "./settings", icon: mdiCogOutline, title: "Settings" },
   ];
@@ -57,42 +75,63 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectPage }) => {
   }
 
   return (
-    <div className={`sidebar min-w-[64px] ${collapsed ? "collapsed" : ""}`}>
+    <aside
+      className={`sidebar ${collapsed ? "collapsed" : ""}`}
+      aria-label="Primary navigation"
+    >
       <div className={`sidebar-header ${collapsed ? "collapsed" : ""}`}>
         {!collapsed && (
-          <img
-            src={logo}
-            alt="Logo"
-            className="logo w-8 h-8 object-contain flex-shrink-0"
-          />
+          <div className="sidebar-brand">
+            <img
+              src={logo}
+              alt="Paperless GPT logo"
+              className="logo w-8 h-8 object-contain flex-shrink-0"
+            />
+            <div className="sidebar-brand-copy">
+              <span className="sidebar-brand-title">Paperless GPT</span>
+              <span className="sidebar-brand-subtitle">Document workflows</span>
+            </div>
+          </div>
         )}
-        <button className="toggle-btn" onClick={toggleSidebar}>
+        <button
+          className="toggle-btn"
+          onClick={toggleSidebar}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          type="button"
+        >
           &#9776;
         </button>
       </div>
-      <ul className="menu-items">
+      <nav className="sidebar-nav" aria-label="App sections">
+        <ul className="menu-items">
         {menuItems.map((item) => (
-          <li
-            key={item.name}
-            className={location.pathname.split('/').at(-1) === item.path.split('/').at(-1) ? "active" : ""}
-            onClick={() => handlePageClick(item.name)}
-          >
+          <li key={item.name}>
             <Link
               to={item.path}
               onClick={() => handlePageClick(item.name)}
-              style={{ display: "flex", alignItems: "center" }}
+              className={
+                location.pathname.split("/").at(-1) === item.path.split("/").at(-1)
+                  ? "menu-link active"
+                  : "menu-link"
+              }
+              aria-current={
+                location.pathname.split("/").at(-1) === item.path.split("/").at(-1)
+                  ? "page"
+                  : undefined
+              }
+              title={collapsed ? item.title : undefined}
             >
-              {/* <Icon path={item.icon} size={1} />
-              {!collapsed && <span>&nbsp; {item.title}</span>} */}
-              <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+              <div className="menu-icon">
                 <Icon path={item.icon} size={1} />
               </div>
-              {!collapsed && <span className="ml-2">{item.title}</span>}
+              {!collapsed && <span className="menu-label">{item.title}</span>}
             </Link>
           </li>
         ))}
-      </ul>
-    </div>
+        </ul>
+      </nav>
+    </aside>
   );
 };
 

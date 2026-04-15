@@ -41,7 +41,7 @@ const App: React.FC = () => {
       <div className="flex h-screen flex-col">
         <div className="flex flex-1 overflow-hidden">
           <Sidebar onSelectPage={(page) => console.log(page)} />
-          <div className="flex flex-1 flex-col overflow-y-auto">
+          <div className="flex flex-1 flex-col overflow-y-auto bg-gray-50 dark:bg-gray-950">
             <div className="flex-1">
               <Routes>
                 <Route path="/" element={<DocumentProcessor />} />
@@ -51,23 +51,22 @@ const App: React.FC = () => {
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </div>
-            <footer className="border-t-2 border-gray-200 bg-blue-50 p-5 text-center text-base text-gray-700 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:shadow-[0_-2px_10px_rgba(0,0,0,0.2)]">
-              <p className="mb-3 font-medium">
-                <span role="img" aria-label="coffee" className="text-xl">☕</span>{' '}
-                If paperless-gpt just saved you from document chaos, consider fueling future development with a coffee! 
-                {' '}<span role="img" aria-label="rocket" className="text-xl">🚀</span>
+            <footer className="border-t border-gray-200 bg-white/90 px-6 py-4 text-center text-sm text-gray-600 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90 dark:text-gray-300">
+              <p className="font-medium">
+                <span role="img" aria-label="coffee" className="mr-1">☕</span>
+                If paperless-gpt saved you time, consider supporting future development.
               </p>
               <a 
                 href="https://buymeacoffee.com/icereed" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="inline-block rounded-md bg-yellow-300 px-6 py-2.5 font-semibold text-black no-underline shadow transition hover:bg-yellow-400 hover:shadow-md dark:bg-yellow-400 dark:hover:bg-yellow-500"
+                className="mt-3 inline-flex items-center rounded-md bg-yellow-300 px-4 py-2 text-sm font-semibold text-black no-underline shadow-sm transition hover:bg-yellow-400 hover:shadow dark:bg-yellow-400 dark:hover:bg-yellow-500"
                 aria-label="Buy me a coffee to support future development"
               >
                 Buy Me a Coffee
               </a>
               {versionInfo && (
-                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                   <span className="font-semibold">paperless-gpt</span> {versionInfo.version}
                   {versionInfo.commit && versionInfo.commit !== 'devCommit' && versionInfo.commit.length >= 7 && (
                     <span className="ml-2">({versionInfo.commit.slice(0, 7)})</span>

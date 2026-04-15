@@ -96,35 +96,59 @@ const History: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-red-500 dark:text-red-400 p-4 text-center">
+      <div className="p-4 text-center text-red-500 dark:text-red-400">
         Error: {error}
       </div>
     );
   }
 
   return (
-    <div className="modification-history container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-        Modification History
-      </h1>
-      <div className="mb-6 text-sm text-gray-500 dark:text-gray-400">
-        Note: when undoing tag changes, this will not re-add 'paperless-gpt-auto'
+    <div className="modification-history mx-auto max-w-6xl px-6 py-8">
+      <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
+              History
+            </p>
+            <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
+              Modification history
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              Review document changes made by Paperless GPT and undo any update
+              that should be rolled back.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Tracked changes</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {totalItems}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Undo note</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Tag undos do not restore <code>paperless-gpt-auto</code>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
       {modifications.length === 0 ? (
-        <p className="text-gray-500 dark:text-gray-400 text-center">
-          No modifications found
-        </p>
+        <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+          No modifications found.
+        </div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-1 mb-6">
+          <div className="mb-6 grid gap-4">
             {modifications.map((modification) => (
               <UndoCard
                 key={modification.ID}
@@ -134,7 +158,7 @@ const History: React.FC = () => {
               />
             ))}
           </div>
-          <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
+          <div className="flex flex-col gap-3 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
               {totalItems > 0 && (
                 <span>

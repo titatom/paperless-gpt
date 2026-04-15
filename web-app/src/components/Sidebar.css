@@ -1,75 +1,156 @@
 .sidebar {
-    width: 250px;
-    background-color: #2c3e50;
-    color: #ecf0f1;
-    display: flex;
-    flex-direction: column;
-    transition: width 0.3s;
-  }
-  
-  .sidebar.collapsed {
-    width: 60px;
+  width: 260px;
+  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  color: #e5eefb;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.25s ease, box-shadow 0.25s ease;
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+}
 
-  }
-  
-  .sidebar-header {
-    display: flex;
-    align-items: center;
-    padding: 10px;
-    background-color: #34495e;
-    justify-content: space-between;
-  }
+.sidebar.collapsed {
+  width: 84px;
+}
 
-  .sidebar-header.collapsed {
-    justify-content: center;
-  }
-  
-  .logo {
-    height: 40px;
-    margin-right: 10px;
-  }
-  
-  .menu-items {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  
-  .menu-items li {
-    padding: 15px 20px;
-    cursor: pointer;
-  }
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 16px 14px;
+}
 
-  .menu-items li.active {
-    background-color: darkslategray;
-    padding: 15px 20px;
-    cursor: pointer;
-  }
+.sidebar-header.collapsed {
+  justify-content: center;
+}
 
-  .menu-items li:hover {
-    background-color: #1abc9c;
-  }
-  
-  .menu-items li a {
-    text-decoration: none;
-    color: inherit;
-    font-size: 18px;
-  }
-  
-  .toggle-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
-  }
-  
-  .sidebar.collapsed .menu-items li a {
-    display: none;
-  }
-  
-  .sidebar.collapsed .logo {
-    height: 40px;
-    margin: auto;
-  }
+.logo {
+  height: 40px;
+  width: 40px;
+}
+
+.sidebar-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-brand-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #f8fafc;
+}
+
+.sidebar-brand-subtitle {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.sidebar-nav {
+  flex: 1;
+}
+
+.menu-items {
+  list-style: none;
+  padding: 6px 10px 16px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.menu-items li {
+  margin: 0;
+}
+
+.menu-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  text-decoration: none;
+  color: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.menu-link:hover {
+  background-color: rgba(59, 130, 246, 0.16);
+  color: #ffffff;
+  transform: translateX(1px);
+}
+
+.menu-link.active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.88), rgba(14, 165, 233, 0.68));
+  color: #ffffff;
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.2);
+}
+
+.menu-link.active .menu-icon {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.menu-icon {
+  display: inline-flex;
+  height: 32px;
+  width: 32px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background-color: rgba(148, 163, 184, 0.14);
+}
+
+.menu-label {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #e5eefb;
+  font-size: 24px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.toggle-btn:hover {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: rgba(96, 165, 250, 0.35);
+  transform: translateY(-1px);
+}
+
+.toggle-btn:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.sidebar.collapsed .menu-items {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.sidebar.collapsed .menu-link {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
   
