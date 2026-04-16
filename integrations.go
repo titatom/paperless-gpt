@@ -23,16 +23,27 @@ import (
 )
 
 const (
-	integrationProviderJobber     = "jobber"
+	integrationProviderJobber      = "jobber"
 	integrationProviderGoogleDrive = "google_drive"
-	integrationProviderQuickBooks = "quickbooks"
+	integrationProviderQuickBooks  = "quickbooks"
 
 	integrationStatusConnected    = "connected"
 	integrationStatusDisconnected = "disconnected"
 )
 
+const (
+	paperlessFieldRefCustomPrefix          = "custom_field:"
+	paperlessFieldRefDocumentTitle         = "document.title"
+	paperlessFieldRefDocumentContent       = "document.content"
+	paperlessFieldRefDocumentCorrespondent = "document.correspondent"
+	paperlessFieldRefDocumentCreatedDate   = "document.created_date"
+	paperlessFieldRefDocumentType          = "document.document_type"
+	paperlessFieldRefOriginalFileName      = "document.original_file_name"
+	paperlessFieldRefArchivedFileName      = "document.archived_file_name"
+)
+
 type IntegrationConnection struct {
-	ID                   uint `gorm:"primaryKey"`
+	ID                   uint   `gorm:"primaryKey"`
 	Provider             string `gorm:"uniqueIndex;size:64;not null"`
 	Status               string `gorm:"size:32;not null"`
 	AccountID            string `gorm:"size:255"`
@@ -48,7 +59,7 @@ type IntegrationConnection struct {
 }
 
 type OAuthStateRecord struct {
-	ID         uint `gorm:"primaryKey"`
+	ID         uint   `gorm:"primaryKey"`
 	Provider   string `gorm:"size:64;index;not null"`
 	State      string `gorm:"uniqueIndex;size:255;not null"`
 	ReturnPath string `gorm:"size:1024"`
@@ -57,7 +68,7 @@ type OAuthStateRecord struct {
 }
 
 type IntegrationActionLog struct {
-	ID              uint `gorm:"primaryKey"`
+	ID              uint   `gorm:"primaryKey"`
 	DocumentID      int    `gorm:"index;not null"`
 	Provider        string `gorm:"size:64;index;not null"`
 	ActionType      string `gorm:"size:64;not null"`
@@ -112,11 +123,11 @@ func (e providerNotConfiguredError) Error() string {
 func getIntegrationProvider(provider string) integrationProvider {
 	switch provider {
 	case integrationProviderJobber:
-		return jobberProvider{}
+		return newJobberProvider()
 	case integrationProviderGoogleDrive:
-		return googleDriveProvider{}
+		return newGoogleDriveProvider()
 	case integrationProviderQuickBooks:
-		return quickBooksProvider{}
+		return newQuickBooksProvider()
 	default:
 		return nil
 	}
@@ -613,7 +624,17 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 		return nil, err
 	}
 
-	title := strings.TrimSpace(suggestion.SuggestedTitle)
+	settingsMutex.RLock()
+	titleFieldRef := strings.TrimSpace(settings.JobberExpenseTitleFieldRef)
+	descriptionFieldRef := strings.TrimSpace(settings.JobberExpenseDescriptionFieldRef)
+	dateFieldRef := strings.TrimSpace(settings.JobberExpenseDateFieldRef)
+	totalFieldRef := strings.TrimSpace(settings.JobberExpenseTotalFieldRef)
+	settingsMutex.RUnlock()
+
+	title := resolveJobberExpenseString(suggestion, titleFieldRef)
+	if title == "" {
+		title = strings.TrimSpace(suggestion.SuggestedTitle)
+	}
 	if title == "" {
 		title = strings.TrimSpace(suggestion.OriginalDocument.Title)
 	}
@@ -621,13 +642,16 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 		title = candidate.DisplayLabel()
 	}
 
-	description := buildJobberExpenseDescription(suggestion)
-	dateValue, err := deriveJobberExpenseDate(suggestion)
+	description := resolveJobberExpenseString(suggestion, descriptionFieldRef)
+	if description == "" {
+		description = buildJobberExpenseDescription(suggestion)
+	}
+	dateValue, err := deriveJobberExpenseDate(suggestion, dateFieldRef)
 	if err != nil {
 		return nil, err
 	}
 
-	totalValue, hasTotal := deriveJobberExpenseTotal(suggestion)
+	totalValue, hasTotal := deriveJobberExpenseTotal(suggestion, totalFieldRef)
 
 	receiptToken, err := s.IssueReceiptAccessToken(ctx, suggestion.ID, 30*time.Minute)
 	if err != nil {
@@ -752,8 +776,11 @@ func buildJobberExpenseDescription(suggestion DocumentSuggestion) string {
 	return strings.Join(parts, " | ")
 }
 
-func deriveJobberExpenseDate(suggestion DocumentSuggestion) (string, error) {
-	raw := strings.TrimSpace(suggestion.SuggestedCreatedDate)
+func deriveJobberExpenseDate(suggestion DocumentSuggestion, fieldRef string) (string, error) {
+	raw := resolveJobberExpenseString(suggestion, fieldRef)
+	if raw == "" {
+		raw = strings.TrimSpace(suggestion.SuggestedCreatedDate)
+	}
 	if raw == "" {
 		raw = strings.TrimSpace(suggestion.OriginalDocument.CreatedDate)
 	}
@@ -766,7 +793,12 @@ func deriveJobberExpenseDate(suggestion DocumentSuggestion) (string, error) {
 	return raw, nil
 }
 
-func deriveJobberExpenseTotal(suggestion DocumentSuggestion) (float64, bool) {
+func deriveJobberExpenseTotal(suggestion DocumentSuggestion, fieldRef string) (float64, bool) {
+	if value, ok := resolveJobberExpenseFieldValue(suggestion, fieldRef); ok {
+		if parsed, ok := parseNumericValue(value); ok {
+			return parsed, true
+		}
+	}
 	for _, field := range suggestion.SuggestedCustomFields {
 		name := strings.ToLower(strings.TrimSpace(field.Name))
 		if strings.Contains(name, "total") || strings.Contains(name, "amount") {
@@ -776,6 +808,120 @@ func deriveJobberExpenseTotal(suggestion DocumentSuggestion) (float64, bool) {
 		}
 	}
 	return 0, false
+}
+
+func customFieldReference(fieldID int) string {
+	if fieldID <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s%d", paperlessFieldRefCustomPrefix, fieldID)
+}
+
+func resolveJobberExpenseString(suggestion DocumentSuggestion, fieldRef string) string {
+	value, ok := resolveJobberExpenseFieldValue(suggestion, fieldRef)
+	if !ok {
+		return ""
+	}
+	return stringifyExpenseFieldValue(value)
+}
+
+func resolveJobberExpenseFieldValue(suggestion DocumentSuggestion, fieldRef string) (interface{}, bool) {
+	switch strings.TrimSpace(fieldRef) {
+	case "":
+		return nil, false
+	case paperlessFieldRefDocumentTitle:
+		if value := strings.TrimSpace(suggestion.SuggestedTitle); value != "" {
+			return value, true
+		}
+		if value := strings.TrimSpace(suggestion.OriginalDocument.Title); value != "" {
+			return value, true
+		}
+	case paperlessFieldRefDocumentContent:
+		if value := strings.TrimSpace(suggestion.SuggestedContent); value != "" {
+			return value, true
+		}
+		if value := strings.TrimSpace(suggestion.OriginalDocument.Content); value != "" {
+			return value, true
+		}
+	case paperlessFieldRefDocumentCorrespondent:
+		if value := strings.TrimSpace(suggestion.SuggestedCorrespondent); value != "" {
+			return value, true
+		}
+		if value := strings.TrimSpace(suggestion.OriginalDocument.Correspondent); value != "" {
+			return value, true
+		}
+	case paperlessFieldRefDocumentCreatedDate:
+		if value := strings.TrimSpace(suggestion.SuggestedCreatedDate); value != "" {
+			return value, true
+		}
+		if value := strings.TrimSpace(suggestion.OriginalDocument.CreatedDate); value != "" {
+			return value, true
+		}
+	case paperlessFieldRefDocumentType:
+		if value := strings.TrimSpace(suggestion.SuggestedDocumentType); value != "" {
+			return value, true
+		}
+		if value := strings.TrimSpace(suggestion.OriginalDocument.DocumentTypeName); value != "" {
+			return value, true
+		}
+	case paperlessFieldRefOriginalFileName:
+		if value := strings.TrimSpace(suggestion.OriginalDocument.OriginalFileName); value != "" {
+			return value, true
+		}
+	case paperlessFieldRefArchivedFileName:
+		if value := strings.TrimSpace(suggestion.OriginalDocument.ArchivedFileName); value != "" {
+			return value, true
+		}
+	default:
+		if !strings.HasPrefix(strings.TrimSpace(fieldRef), paperlessFieldRefCustomPrefix) {
+			return nil, false
+		}
+		fieldID, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(fieldRef), paperlessFieldRefCustomPrefix))
+		if err != nil || fieldID <= 0 {
+			return nil, false
+		}
+		for _, field := range suggestion.SuggestedCustomFields {
+			if field.ID == fieldID && field.Value != nil {
+				return field.Value, true
+			}
+		}
+		for _, field := range suggestion.OriginalDocument.CustomFields {
+			if field.Field == fieldID && field.Value != nil {
+				return field.Value, true
+			}
+		}
+	}
+
+	return nil, false
+}
+
+func stringifyExpenseFieldValue(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	case float64:
+		return strings.TrimSpace(strconv.FormatFloat(v, 'f', -1, 64))
+	case float32:
+		return strings.TrimSpace(strconv.FormatFloat(float64(v), 'f', -1, 32))
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10)
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
 }
 
 func parseNumericValue(value interface{}) (float64, bool) {
@@ -955,6 +1101,23 @@ type jobberProvider struct {
 	oauthProviderBase
 }
 
+func newJobberProvider() jobberProvider {
+	return jobberProvider{
+		oauthProviderBase: oauthProviderBase{
+			name:         integrationProviderJobber,
+			clientID:     strings.TrimSpace(os.Getenv("JOBBER_CLIENT_ID")),
+			clientSecret: strings.TrimSpace(os.Getenv("JOBBER_CLIENT_SECRET")),
+			authURL:      "https://api.getjobber.com/api/oauth/authorize",
+			tokenURL:     "https://api.getjobber.com/api/oauth/token",
+			scopes: []string{
+				"read_clients",
+				"read_jobs",
+				"write_expenses",
+			},
+		},
+	}
+}
+
 func (p jobberProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {
 	validConn, err := p.ensureFreshToken(ctx, nil, conn)
 	if err != nil {
@@ -1002,6 +1165,24 @@ func (p jobberProvider) ensureFreshToken(ctx context.Context, db *gorm.DB, conn 
 
 type googleDriveProvider struct {
 	oauthProviderBase
+}
+
+func newGoogleDriveProvider() googleDriveProvider {
+	return googleDriveProvider{
+		oauthProviderBase: oauthProviderBase{
+			name:         integrationProviderGoogleDrive,
+			clientID:     strings.TrimSpace(os.Getenv("GOOGLE_DRIVE_CLIENT_ID")),
+			clientSecret: strings.TrimSpace(os.Getenv("GOOGLE_DRIVE_CLIENT_SECRET")),
+			authURL:      "https://accounts.google.com/o/oauth2/auth",
+			tokenURL:     "https://oauth2.googleapis.com/token",
+			scopes: []string{
+				"https://www.googleapis.com/auth/drive.file",
+				"openid",
+				"profile",
+				"email",
+			},
+		},
+	}
 }
 
 func (p googleDriveProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {
@@ -1068,6 +1249,21 @@ func (p googleDriveProvider) ensureFreshToken(ctx context.Context, db *gorm.DB, 
 
 type quickBooksProvider struct {
 	oauthProviderBase
+}
+
+func newQuickBooksProvider() quickBooksProvider {
+	return quickBooksProvider{
+		oauthProviderBase: oauthProviderBase{
+			name:         integrationProviderQuickBooks,
+			clientID:     strings.TrimSpace(os.Getenv("QUICKBOOKS_CLIENT_ID")),
+			clientSecret: strings.TrimSpace(os.Getenv("QUICKBOOKS_CLIENT_SECRET")),
+			authURL:      "https://appcenter.intuit.com/connect/oauth2",
+			tokenURL:     "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+			scopes: []string{
+				"com.intuit.quickbooks.accounting",
+			},
+		},
+	}
 }
 
 func (p quickBooksProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {

@@ -95,6 +95,18 @@ func loadSettings() {
 	if settings.CustomFieldsWriteMode == "" {
 		settings.CustomFieldsWriteMode = defaults.CustomFieldsWriteMode
 	}
+	if settings.JobberExpenseTitleFieldRef == "" && settings.JobberExpenseTitleFieldID > 0 {
+		settings.JobberExpenseTitleFieldRef = customFieldReference(settings.JobberExpenseTitleFieldID)
+	}
+	if settings.JobberExpenseDescriptionFieldRef == "" && settings.JobberExpenseDescriptionFieldID > 0 {
+		settings.JobberExpenseDescriptionFieldRef = customFieldReference(settings.JobberExpenseDescriptionFieldID)
+	}
+	if settings.JobberExpenseDateFieldRef == "" && settings.JobberExpenseDateFieldID > 0 {
+		settings.JobberExpenseDateFieldRef = customFieldReference(settings.JobberExpenseDateFieldID)
+	}
+	if settings.JobberExpenseTotalFieldRef == "" && settings.JobberExpenseTotalFieldID > 0 {
+		settings.JobberExpenseTotalFieldRef = customFieldReference(settings.JobberExpenseTotalFieldID)
+	}
 
 	log.Info("Successfully loaded settings from settings.json")
 }
