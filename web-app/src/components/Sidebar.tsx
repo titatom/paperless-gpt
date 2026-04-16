@@ -3,6 +3,7 @@ import {
   mdiFileChartOutline,
   mdiHistory,
   mdiHomeOutline,
+  mdiLogout,
   mdiTextBoxSearchOutline,
 } from "@mdi/js";
 import { Icon } from "@mdi/react";
@@ -10,6 +11,7 @@ import axios from "axios";
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import logo from "../assets/logo.svg";
+import { useAuth } from "../context/AuthContext";
 import "./Sidebar.css";
 
 interface SidebarProps {
@@ -20,6 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectPage }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [ocrEnabled, setOcrEnabled] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const toggleSidebar = () => {
     setCollapsed((prev) => !prev);
@@ -131,6 +134,29 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectPage }) => {
         ))}
         </ul>
       </nav>
+
+      {/* User section at the bottom */}
+      {user && (
+        <div className={`sidebar-footer ${collapsed ? "collapsed" : ""}`} style={{ marginTop: "auto", padding: collapsed ? "0.5rem" : "0.75rem 1rem", borderTop: "1px solid var(--border-color, #e5e7eb)" }}>
+          {!collapsed && (
+            <p className="mb-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400" title={user.username}>
+              {user.username}
+            </p>
+          )}
+          <button
+            onClick={() => { void logout(); }}
+            className="menu-link w-full"
+            title={collapsed ? "Sign out" : undefined}
+            aria-label="Sign out"
+            type="button"
+          >
+            <div className="menu-icon">
+              <Icon path={mdiLogout} size={1} />
+            </div>
+            {!collapsed && <span className="menu-label">Sign out</span>}
+          </button>
+        </div>
+      )}
     </aside>
   );
 };

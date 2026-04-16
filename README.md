@@ -103,6 +103,7 @@ https://github.com/user-attachments/assets/bd5d38b9-9309-40b9-93ca-918dfa4f3fd4
     - [Usage Recommendations](#usage-recommendations)
   - [Configuration](#configuration)
     - [Environment Variables](#environment-variables)
+    - [Security](#security-variables)
     - [Custom Prompt Templates](#custom-prompt-templates)
       - [Template Variables](#template-variables)
   - [LLM-Based OCR: Compare for Yourself](#llm-based-ocr-compare-for-yourself)
@@ -648,21 +649,45 @@ For best results with the enhanced OCR features:
 
 #### Security Variables
 
-> **Important:** When exposing paperless-gpt to the internet you should configure at least one authentication mechanism.
+> **Important:** When exposing paperless-gpt to the internet you should configure user authentication (recommended) or at minimum HTTP Basic Auth / Bearer token.
+
+##### User authentication (recommended)
+
+paperless-gpt ships with a built-in user system. On first boot, the web UI shows a setup wizard where you create an admin account. After that, every visit requires a login. Sessions are stored server-side (SQLite) and expire after 24 h of inactivity with a hard ceiling of 7 days.
+
+**First-run flow:**
+1. Start the container.
+2. Open the web UI — you are redirected to a setup wizard.
+3. Enter a username and a strong password (minimum 8 characters).
+4. You are logged in and the wizard will not appear again.
+
+Users can change their password at any time from the **Settings → Account** section. The session cookie is `HttpOnly`, `SameSite=Strict`, and `Secure` when TLS is detected or `X-Forwarded-Proto: https` is set by the reverse proxy.
+
+| Variable | Description | Required | Default |
+| --- | --- | --- | --- |
+| `SESSION_COOKIE_SECURE` | Set to `true` when serving behind HTTPS. Leave `false` for plain HTTP. The value is inferred automatically from TLS / `X-Forwarded-Proto` in most cases. | No | auto-detected |
+
+##### Static credentials (fallback / additional layer)
+
+These are active in addition to user auth when set, and work without any user accounts (e.g. for automated scripts).
 
 | Variable                | Description                                                                                                                             | Required | Default          |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
 | `AUTH_USERNAME`         | Username for HTTP Basic Auth. Must be set together with `AUTH_PASSWORD`.                                                                | No       |                  |
 | `AUTH_PASSWORD`         | Password for HTTP Basic Auth. Must be set together with `AUTH_USERNAME`.                                                                | No       |                  |
 | `AUTH_TOKEN`            | Static bearer token for API authentication. Send as `Authorization: Bearer <token>`. Can be combined with Basic Auth.                  | No       |                  |
+
+##### Network & rate limiting
+
+| Variable                | Description                                                                                                                             | Required | Default          |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
 | `TRUSTED_PROXIES`       | Comma-separated list of trusted reverse-proxy IPs/CIDRs (e.g. `10.0.0.1,172.16.0.0/12`). Controls which `X-Forwarded-For` headers are trusted for rate limiting and IP detection. | No | `127.0.0.1,::1` |
 | `HTTP_RATE_LIMIT_RPS`   | Maximum sustained HTTP requests per second per client IP (0 disables limiting).                                                         | No       | `10`             |
 | `HTTP_RATE_LIMIT_BURST` | Maximum burst size for HTTP rate limiting.                                                                                              | No       | `30`             |
 | `MAX_BODY_BYTES`        | Maximum allowed HTTP request body size in bytes.                                                                                        | No       | `10485760` (10 MiB) |
 
 **Notes:**
-- When neither `AUTH_USERNAME`/`AUTH_PASSWORD` nor `AUTH_TOKEN` is set, a warning is logged and no authentication is enforced. This is intentional for backward compatibility with internal/trusted-network deployments.
-- The OAuth callback routes (`/api/integrations/*/oauth/callback`) and Jobber receipt download routes (`/api/integrations/jobber/receipt/*`) are always exempt from authentication because they are driven by browser redirects from third-party servers.
+- The OAuth callback routes (`/api/integrations/*/oauth/callback`) and Jobber receipt download routes (`/api/integrations/jobber/receipt/*`) are always exempt from authentication.
 - All HTTP responses include defensive security headers (`X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`) regardless of authentication settings.
 
 ### Custom Prompt Templates

@@ -109,8 +109,10 @@ func isExemptFromAuth(path string) bool {
 // deployments that rely on network-level access control).
 func authMiddleware(cfg SecurityConfig) gin.HandlerFunc {
 	if !cfg.isAuthEnabled() {
-		log.Warn("No HTTP authentication configured. " +
-			"Set AUTH_USERNAME + AUTH_PASSWORD or AUTH_TOKEN to protect the API when exposed to the internet.")
+		// Session-based user auth (auth.go) may still be active; only warn when
+		// that is also not in use.  The warning is intentionally deferred to
+		// runtime because the DB is not available at middleware construction
+		// time.  Session auth logs its own warnings during startup.
 		return func(c *gin.Context) { c.Next() }
 	}
 

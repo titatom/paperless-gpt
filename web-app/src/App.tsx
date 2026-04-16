@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import DocumentProcessor from './DocumentProcessor';
-import ExperimentalOCR from './ExperimentalOCR'; // New component
+import ExperimentalOCR from './ExperimentalOCR';
 import History from './History';
 import Settings from './components/Settings';
 import AdhocAnalysis from './AdhocAnalysis';
+import LoginPage from './pages/LoginPage';
+import SetupPage from './pages/SetupPage';
 
 interface VersionInfo {
   version: string;
@@ -13,29 +16,48 @@ interface VersionInfo {
   buildDate: string;
 }
 
-const App: React.FC = () => {
+// Inner component so it can access AuthContext
+const AppShell: React.FC = () => {
+  const { user, loading, setupRequired } = useAuth();
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
-  // Fetch version information on component mount
   useEffect(() => {
     const fetchVersion = async () => {
       try {
         const response = await fetch('./api/version');
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json() as VersionInfo;
           setVersionInfo(data);
         }
       } catch (error) {
         console.error('Failed to fetch version information:', error);
       }
     };
-    fetchVersion();
+    void fetchVersion();
   }, []);
 
-  // Keep the base path (path prefix from reverse-proxy) and remove the app path,
-  // convert "/" to "" so Router basename is empty at root.
-  const rawBasename = window.location.pathname.replace(/(\/[^/]+)$/, "/");
-  const basename = rawBasename === "/" ? "" : rawBasename;
+  // Keep the base path and remove the app path.
+  const rawBasename = window.location.pathname.replace(/(\/[^/]+)$/, '/');
+  const basename = rawBasename === '/' ? '' : rawBasename;
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+      </div>
+    );
+  }
+
+  // First-run: no users exist yet
+  if (setupRequired) {
+    return <SetupPage />;
+  }
+
+  // Not logged in
+  if (!user) {
+    return <LoginPage />;
+  }
+
   return (
     <Router basename={basename}>
       <div className="flex h-screen flex-col">
@@ -56,10 +78,10 @@ const App: React.FC = () => {
                 <span role="img" aria-label="coffee" className="mr-1">☕</span>
                 If paperless-gpt saved you time, consider supporting future development.
               </p>
-              <a 
-                href="https://buymeacoffee.com/icereed" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://buymeacoffee.com/icereed"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mt-3 inline-flex items-center rounded-md bg-yellow-300 px-4 py-2 text-sm font-semibold text-black no-underline shadow-sm transition hover:bg-yellow-400 hover:shadow dark:bg-yellow-400 dark:hover:bg-yellow-500"
                 aria-label="Buy me a coffee to support future development"
               >
@@ -80,5 +102,11 @@ const App: React.FC = () => {
     </Router>
   );
 };
+
+const App: React.FC = () => (
+  <AuthProvider>
+    <AppShell />
+  </AuthProvider>
+);
 
 export default App;

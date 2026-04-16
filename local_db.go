@@ -61,7 +61,7 @@ func InitializeDB() *gorm.DB {
 	}
 
 	// Migrate the schema (create the tables if they don't exist)
-	err = db.AutoMigrate(&ModificationHistory{}, &OCRPageResult{}, &IntegrationConnection{}, &OAuthStateRecord{}, &IntegrationActionLog{}, &IntegrationReceiptShare{})
+	err = db.AutoMigrate(&ModificationHistory{}, &OCRPageResult{}, &IntegrationConnection{}, &OAuthStateRecord{}, &IntegrationActionLog{}, &IntegrationReceiptShare{}, &User{}, &UserSession{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database schema: %v", err)
 	}
