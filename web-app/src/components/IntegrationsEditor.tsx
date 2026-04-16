@@ -130,7 +130,7 @@ const IntegrationsEditor: React.FC = () => {
       setSuccessMessage(`${prettyProviderName(integration)} connected successfully.`);
       refreshData();
     } else if (status === 'error') {
-      setError(`${prettyProviderName(integration)} connection failed.`);
+      setError(`${prettyProviderName(integration)} connection failed. Please verify your server-side app credentials, redirect URL, and scopes.`);
     }
 
     params.delete('integration');

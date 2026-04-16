@@ -382,8 +382,7 @@ func (s *IntegrationsService) BeginOAuth(ctx context.Context, provider, redirect
 	if err := saveOAuthState(s.DB.WithContext(ctx), provider, state, "/settings"); err != nil {
 		return "", err
 	}
-	// This helper is currently unused by handlers, but kept for completeness.
-	return "", fmt.Errorf("begin oauth without request context is unsupported")
+	return "", errors.New("begin oauth must be driven through the HTTP handler")
 }
 
 func (s *IntegrationsService) HandleOAuthCallback(ctx context.Context, provider, code, state, redirectURL string) error {
