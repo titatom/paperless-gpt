@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -111,7 +112,9 @@ func getSession(db *gorm.DB, id string) *UserSession {
 	// Slide the window
 	s.ExpiresAt = now.Add(sessionIdleSeconds * time.Second)
 	s.LastSeenAt = now
-	db.Save(&s)
+	if err := db.Save(&s).Error; err != nil {
+		log.Errorf("getSession: failed to slide session expiry for %s: %v", id, err)
+	}
 	return &s
 }
 
@@ -126,17 +129,16 @@ func deleteSession(db *gorm.DB, id string) {
 const sessionCookieName = "paperless_gpt_session"
 
 func setSessionCookie(c *gin.Context, sessionID string, secure bool) {
-	c.SetCookie(
-		sessionCookieName,
-		sessionID,
-		sessionIdleSeconds,
-		"/",
-		"",
-		secure,
-		true, // httpOnly
-	)
-	// explicit SameSite=Strict
-	c.Header("Set-Cookie", c.Writer.Header().Get("Set-Cookie")+"; SameSite=Strict")
+	cookie := &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    sessionID,
+		MaxAge:   sessionIdleSeconds,
+		Path:     "/",
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(c.Writer, cookie)
 }
 
 func clearSessionCookie(c *gin.Context) {
@@ -176,6 +178,9 @@ type changePasswordRequest struct {
 // ---------------------------------------------------------------------------
 
 func isSessionAuthEnabled(db *gorm.DB) bool {
+	if strings.ToLower(os.Getenv("AUTH_USER_ENABLED")) == "true" {
+		return true
+	}
 	var count int64
 	db.Model(&User{}).Count(&count)
 	return count > 0
@@ -315,10 +320,12 @@ func (app *App) createFirstAdminHandler(c *gin.Context) {
 	log.Infof("First admin account created: %s", user.Username)
 
 	session := createSession(app.Database, user.ID, c.ClientIP(), c.GetHeader("User-Agent"))
-	if session != nil {
-		secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-		setSessionCookie(c, session.ID, secure)
+	if session == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Account created but failed to start session — please log in"})
+		return
 	}
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	setSessionCookie(c, session.ID, secure)
 
 	c.JSON(http.StatusCreated, userOut{
 		ID:                  user.ID,

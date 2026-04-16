@@ -109,8 +109,9 @@ func (app *App) getAllTagsHandler(c *gin.Context) {
 
 // getSettingsHandler handles the GET /api/settings endpoint
 func (app *App) getSettingsHandler(c *gin.Context) {
-	// Refresh the cache when settings are requested
-	go refreshCustomFieldsCache(app.Client)
+	// Refresh the custom fields cache synchronously so the response contains
+	// fresh data rather than whatever was last cached.
+	refreshCustomFieldsCache(app.Client)
 
 	settingsMutex.RLock()
 	defer settingsMutex.RUnlock()
@@ -334,7 +335,11 @@ const oauthPopupHTMLTemplate = `<!DOCTYPE html>
 </html>`
 
 func oauthPopupResponse(c *gin.Context, status int, title, message string, msgPayload interface{}) {
-	jsonBytes, _ := json.Marshal(msgPayload)
+	jsonBytes, err := json.Marshal(msgPayload)
+	if err != nil {
+		log.Errorf("oauthPopupResponse: failed to marshal payload: %v", err)
+		jsonBytes = []byte("{}")
+	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(status, oauthPopupHTMLTemplate, title, string(jsonBytes), message)
 }
@@ -583,6 +588,11 @@ func mergeSettingsPatch(current Settings, patch map[string]interface{}) (Setting
 }
 
 func (app *App) submitOCRJobHandler(c *gin.Context) {
+	if !app.isOcrEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OCR is not enabled on this server"})
+		return
+	}
+
 	documentIDStr := c.Param("id")
 	documentID, err := strconv.Atoi(documentIDStr)
 	if err != nil {
@@ -641,11 +651,12 @@ func (app *App) getAllJobsHandler(c *gin.Context) {
 	jobList := make([]gin.H, 0, len(jobs))
 	for _, job := range jobs {
 		response := gin.H{
-			"job_id":     job.ID,
-			"status":     job.Status,
-			"created_at": job.CreatedAt,
-			"updated_at": job.UpdatedAt,
-			"pages_done": job.PagesDone,
+			"job_id":      job.ID,
+			"status":      job.Status,
+			"created_at":  job.CreatedAt,
+			"updated_at":  job.UpdatedAt,
+			"pages_done":  job.PagesDone,
+			"total_pages": job.TotalPages,
 		}
 
 		if job.Status == "completed" {
@@ -824,6 +835,8 @@ func (app *App) reOCRPageHandler(c *gin.Context) {
 	saveErr := SaveSingleOcrPageResult(app.Database, parsedID, pageIdx, result.Text, result.OcrLimitHit, genInfoJSON)
 	if saveErr != nil {
 		log.Errorf("Failed to save re-OCR result for doc %d page %d: %v", parsedID, pageIdx, saveErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Re-OCR succeeded but failed to persist result"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1019,8 +1032,8 @@ func (app *App) analyzeDocumentsHandler(c *gin.Context) {
 	// Call LLM with the custom prompt and document contexts
 	llmResponse, err := app.LLM.Call(ctx, finalPrompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error calling LLM"})
-		log.Errorf("Error calling LLM: %v", err)
+		log.Errorf("Error calling LLM for adhoc analysis: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error calling LLM: %v", err)})
 		return
 	}
 

@@ -50,7 +50,7 @@ var (
 	openaiAPIKey                  = os.Getenv("OPENAI_API_KEY")
 	manualTag                     = os.Getenv("MANUAL_TAG")
 	autoTag                       = os.Getenv("AUTO_TAG")
-	manualOcrTag                  = os.Getenv("MANUAL_OCR_TAG") // Not used yet
+	manualOcrTag                  = os.Getenv("MANUAL_OCR_TAG")
 	autoOcrTag                    = os.Getenv("AUTO_OCR_TAG")
 	ocrProcessMode                = os.Getenv("OCR_PROCESS_MODE")
 	llmProvider                   = os.Getenv("LLM_PROVIDER")
@@ -225,7 +225,7 @@ func main() {
 		"Language": getLikelyLanguage(),
 	})
 	if err != nil {
-		log.Fatalf("error executing tag template: %v", err)
+		log.Fatalf("error executing OCR template: %v", err)
 	}
 
 	ocrPrompt := promptBuffer.String()
@@ -295,7 +295,7 @@ func main() {
 		DoclingImageExportMode:   doclingImageExportMode,
 		DoclingOCRPipeline:       doclingOCRPipeline,
 		DoclingOCREngine:         doclingOCREngine,
-		EnableHOCR:               true, // Always generate hOCR struct if provider supports it
+		EnableHOCR:               os.Getenv("OCR_DISABLE_HOCR") != "true",
 		VisionLLMMaxTokens:       visionLlmMaxTokens,
 		VisionLLMTemperature:     visionLlmTemperature,
 		OllamaOcrTopK:            ollamaOcrTopK,
@@ -365,6 +365,10 @@ func main() {
 				log.Fatalf("Invalid OCR_LIMIT_PAGES value: %v", err)
 			}
 		}
+	}
+
+	if appPublicURL != "" {
+		log.Infof("App public URL: %s", appPublicURL)
 	}
 
 	// Start Background-Tasks for Auto-Tagging and Auto-OCR (if enabled)
@@ -520,7 +524,7 @@ func main() {
 
 	// Start OCR worker pool
 	numWorkers := 1 // Number of workers to start
-	startWorkerPool(app, numWorkers)
+	startWorkerPool(app, numWorkers, ctx)
 
 	if listenInterface == "" {
 		listenInterface = ":8080"
