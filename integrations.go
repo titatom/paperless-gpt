@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -380,35 +379,6 @@ func (s *IntegrationsService) Status(provider string) IntegrationConnectionStatu
 		log.WithError(err).Warnf("failed to fetch connection for provider %s", provider)
 	}
 	return summarizeIntegrationStatus(provider, impl, conn)
-}
-
-func (s *IntegrationsService) BeginOAuth(ctx context.Context, provider, redirectURL string) (string, error) {
-	_ = redirectURL // callback URL is derived from request/base URL in handlers
-	impl := getIntegrationProvider(provider)
-	if impl == nil {
-		return "", fmt.Errorf("unknown integration provider")
-	}
-	configured, reason := impl.Configured()
-	if !configured {
-		return "", errors.New(reason)
-	}
-	state, err := generateOAuthStateToken()
-	if err != nil {
-		return "", err
-	}
-	if err := saveOAuthState(s.DB.WithContext(ctx), provider, state, "/settings"); err != nil {
-		return "", err
-	}
-	return "", errors.New("begin oauth must be driven through the HTTP handler")
-}
-
-func (s *IntegrationsService) HandleOAuthCallback(ctx context.Context, provider, code, state, redirectURL string) error {
-	_ = ctx
-	_ = provider
-	_ = code
-	_ = state
-	_ = redirectURL
-	return fmt.Errorf("HandleOAuthCallback should be driven through HTTP handlers")
 }
 
 func (s *IntegrationsService) Disconnect(ctx context.Context, provider string) error {
