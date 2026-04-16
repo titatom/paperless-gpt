@@ -3,6 +3,7 @@ import PromptsEditor from './PromptsEditor';
 import CustomFieldsEditor from './CustomFieldsEditor';
 import MetadataRestrictionsEditor from './MetadataRestrictionsEditor';
 import IntegrationsEditor from './IntegrationsEditor';
+import ChangePassword from './ChangePassword';
 
 const Settings: React.FC = () => {
   return (
@@ -28,6 +29,10 @@ const Settings: React.FC = () => {
 
       <div className="p-6 bg-gray-100 dark:bg-gray-900">
         <IntegrationsEditor />
+      </div>
+
+      <div className="mt-8">
+        <ChangePassword />
       </div>
     </main>
   );

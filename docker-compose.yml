@@ -5,3 +5,34 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    # --- Security (recommended when exposed to the internet) ---
+    #
+    # Built-in user auth (recommended):
+    #   On first boot, open the web UI at http://localhost:8080.
+    #   You will be redirected to a setup wizard to create your admin account.
+    #   All subsequent visits require login; sessions expire after 24 h idle
+    #   or 7 days absolute. Set SESSION_COOKIE_SECURE=true when behind HTTPS.
+    #
+    # Static credentials (optional, additional layer for scripts / APIs):
+    #
+    # environment:
+    #   # HTTP Basic Auth (browser login dialog)
+    #   AUTH_USERNAME: "your-username"
+    #   AUTH_PASSWORD: "your-strong-password"
+    #
+    #   # Bearer token (API / programmatic access)
+    #   AUTH_TOKEN: "your-random-secret-token"
+    #
+    #   # Set to true when serving behind HTTPS (affects session cookie Secure flag)
+    #   # SESSION_COOKIE_SECURE: "true"
+    #
+    #   # Trusted reverse-proxy IPs/CIDRs (comma-separated).
+    #   # Set to your proxy IP so X-Forwarded-For is honoured correctly.
+    #   TRUSTED_PROXIES: "172.20.0.1"
+    #
+    #   # Per-IP rate limiting (requests/second sustained, burst)
+    #   HTTP_RATE_LIMIT_RPS: "10"
+    #   HTTP_RATE_LIMIT_BURST: "30"
+    #
+    #   # Maximum request body size (bytes)
+    #   MAX_BODY_BYTES: "10485760"
