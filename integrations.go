@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -342,6 +344,11 @@ type GoogleDriveUploadResult struct {
 	FileURL string
 }
 
+type JobberExpenseCreateResult struct {
+	ExpenseID string
+	WebURL    string
+}
+
 func NewIntegrationsService(db *gorm.DB) *IntegrationsService {
 	return &IntegrationsService{DB: db}
 }
@@ -558,6 +565,136 @@ func (s *IntegrationsService) UploadDocumentToGoogleDrive(ctx context.Context, c
 	}, nil
 }
 
+func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client ClientInterface, suggestion DocumentSuggestion, candidate JobberMatchCandidate) (*JobberExpenseCreateResult, error) {
+	conn, err := getOptionalConnectionByProvider(s.DB.WithContext(ctx), integrationProviderJobber)
+	if err != nil {
+		return nil, err
+	}
+	if conn == nil || conn.Status != integrationStatusConnected {
+		return nil, fmt.Errorf("jobber is not connected")
+	}
+
+	impl := jobberProvider{}
+	validConn, err := impl.ensureFreshToken(ctx, s.DB.WithContext(ctx), conn)
+	if err != nil {
+		return nil, err
+	}
+
+	title := strings.TrimSpace(suggestion.SuggestedTitle)
+	if title == "" {
+		title = strings.TrimSpace(suggestion.OriginalDocument.Title)
+	}
+	if title == "" {
+		title = candidate.DisplayLabel()
+	}
+
+	description := buildJobberExpenseDescription(suggestion)
+	dateValue, err := deriveJobberExpenseDate(suggestion)
+	if err != nil {
+		return nil, err
+	}
+
+	totalValue, hasTotal := deriveJobberExpenseTotal(suggestion)
+
+	document, err := client.GetDocument(ctx, suggestion.ID)
+	if err != nil {
+		return nil, err
+	}
+	receiptURL := strings.TrimSpace(document.ArchivedFileName)
+	if receiptURL == "" {
+		receiptURL = strings.TrimSpace(document.OriginalFileName)
+	}
+	// Jobber expects an accessible URL; for phase 2, reuse the Paperless public document URL if available.
+	if paperlessPublicURL := strings.TrimSpace(os.Getenv("PAPERLESS_PUBLIC_URL")); paperlessPublicURL != "" {
+		receiptURL = strings.TrimRight(paperlessPublicURL, "/") + fmt.Sprintf("/documents/%d/download/", suggestion.ID)
+	}
+
+	input := map[string]interface{}{
+		"title":       title,
+		"date":        dateValue,
+		"linkedJobId": candidate.ID,
+	}
+	if description != "" {
+		input["description"] = description
+	}
+	if hasTotal {
+		input["total"] = totalValue
+	}
+	if receiptURL != "" {
+		input["receiptUrl"] = receiptURL
+	}
+
+	mutation := `mutation ExpenseCreate($input: ExpenseCreateInput!) {
+  expenseCreate(input: $input) {
+    expense {
+      id
+      linkedJob {
+        id
+      }
+    }
+    userErrors {
+      message
+      path
+    }
+  }
+}`
+
+	var response struct {
+		Data struct {
+			ExpenseCreate struct {
+				Expense *struct {
+					ID        string `json:"id"`
+					LinkedJob *struct {
+						ID string `json:"id"`
+					} `json:"linkedJob"`
+				} `json:"expense"`
+				UserErrors []struct {
+					Message string   `json:"message"`
+					Path    []string `json:"path"`
+				} `json:"userErrors"`
+			} `json:"expenseCreate"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := executeJSONGraphQL(ctx, "https://api.getjobber.com/api/graphql", validConn.AccessToken, mutation, map[string]interface{}{"input": input}, &response); err != nil {
+		return nil, err
+	}
+	if len(response.Errors) > 0 {
+		return nil, fmt.Errorf("jobber graphql error: %s", response.Errors[0].Message)
+	}
+	if len(response.Data.ExpenseCreate.UserErrors) > 0 {
+		return nil, fmt.Errorf("jobber expense create error: %s", response.Data.ExpenseCreate.UserErrors[0].Message)
+	}
+	if response.Data.ExpenseCreate.Expense == nil {
+		return nil, fmt.Errorf("jobber expense create returned no expense")
+	}
+
+	expenseID := response.Data.ExpenseCreate.Expense.ID
+	webURL := ""
+	if strings.TrimSpace(validConn.AccountName) != "" {
+		// URL is not directly exposed by the mutation payload we query; keep empty for now.
+		webURL = ""
+	}
+
+	insertIntegrationActionLog(s.DB.WithContext(ctx), &IntegrationActionLog{
+		DocumentID:      suggestion.ID,
+		Provider:        integrationProviderJobber,
+		ActionType:      "expense_create",
+		Status:          "success",
+		ExternalID:      expenseID,
+		RequestSummary:  fmt.Sprintf("job=%s title=%s", candidate.ID, title),
+		ResponseSummary: expenseID,
+	})
+
+	return &JobberExpenseCreateResult{
+		ExpenseID: expenseID,
+		WebURL:    webURL,
+	}, nil
+}
+
 func buildMultipartDriveUpload(metadataJSON []byte, fileContent []byte, filename string) (io.Reader, string, error) {
 	boundary := "paperless-gpt-drive-upload"
 	body := &strings.Builder{}
@@ -570,6 +707,70 @@ func buildMultipartDriveUpload(metadataJSON []byte, fileContent []byte, filename
 	content := body.String()
 	reader := io.MultiReader(strings.NewReader(content), strings.NewReader(string(fileContent)), strings.NewReader("\r\n--"+boundary+"--\r\n"))
 	return reader, "multipart/related; boundary=" + boundary, nil
+}
+
+func buildJobberExpenseDescription(suggestion DocumentSuggestion) string {
+	parts := []string{}
+	if value := strings.TrimSpace(suggestion.SuggestedCorrespondent); value != "" {
+		parts = append(parts, "Vendor: "+value)
+	} else if value := strings.TrimSpace(suggestion.OriginalDocument.Correspondent); value != "" {
+		parts = append(parts, "Vendor: "+value)
+	}
+	if value := strings.TrimSpace(suggestion.OriginalDocument.DocumentTypeName); value != "" {
+		parts = append(parts, "Type: "+value)
+	}
+	return strings.Join(parts, " | ")
+}
+
+func deriveJobberExpenseDate(suggestion DocumentSuggestion) (string, error) {
+	raw := strings.TrimSpace(suggestion.SuggestedCreatedDate)
+	if raw == "" {
+		raw = strings.TrimSpace(suggestion.OriginalDocument.CreatedDate)
+	}
+	if raw == "" {
+		return "", fmt.Errorf("missing expense date")
+	}
+	if len(raw) == len("2006-01-02") {
+		return raw + "T00:00:00Z", nil
+	}
+	return raw, nil
+}
+
+func deriveJobberExpenseTotal(suggestion DocumentSuggestion) (float64, bool) {
+	for _, field := range suggestion.SuggestedCustomFields {
+		name := strings.ToLower(strings.TrimSpace(field.Name))
+		if strings.Contains(name, "total") || strings.Contains(name, "amount") {
+			if parsed, ok := parseNumericValue(field.Value); ok {
+				return parsed, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func parseNumericValue(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		if !math.IsNaN(v) && !math.IsInf(v, 0) {
+			return v, true
+		}
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		if parsed, err := v.Float64(); err == nil {
+			return parsed, true
+		}
+	case string:
+		cleaned := strings.TrimSpace(v)
+		cleaned = strings.ReplaceAll(cleaned, ",", "")
+		cleaned = strings.TrimPrefix(cleaned, "$")
+		if parsed, err := strconv.ParseFloat(cleaned, 64); err == nil {
+			return parsed, true
+		}
+	}
+	return 0, false
 }
 
 func rankJobberCandidates(document Document, candidates []JobberMatchCandidate) []JobberMatchCandidate {

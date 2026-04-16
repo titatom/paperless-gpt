@@ -12,6 +12,10 @@ interface SettingsData {
   jobber_job_number_field_id: number;
   jobber_client_field_id: number;
   jobber_job_name_field_id: number;
+  jobber_expense_enabled: boolean;
+  jobber_expense_title_field_id: number;
+  jobber_expense_description_field_id: number;
+  jobber_expense_total_field_id: number;
   google_drive_enabled: boolean;
   google_drive_folder_id: string;
   quickbooks_enabled: boolean;
@@ -32,6 +36,10 @@ const defaultSettings: SettingsData = {
   jobber_job_number_field_id: 0,
   jobber_client_field_id: 0,
   jobber_job_name_field_id: 0,
+  jobber_expense_enabled: false,
+  jobber_expense_title_field_id: 0,
+  jobber_expense_description_field_id: 0,
+  jobber_expense_total_field_id: 0,
   google_drive_enabled: false,
   google_drive_folder_id: '',
   quickbooks_enabled: false,
@@ -75,6 +83,10 @@ const IntegrationsEditor: React.FC = () => {
         jobber_job_number_field_id: Number(settingsData.settings?.jobber_job_number_field_id || 0),
         jobber_client_field_id: Number(settingsData.settings?.jobber_client_field_id || 0),
         jobber_job_name_field_id: Number(settingsData.settings?.jobber_job_name_field_id || 0),
+        jobber_expense_enabled: !!settingsData.settings?.jobber_expense_enabled,
+        jobber_expense_title_field_id: Number(settingsData.settings?.jobber_expense_title_field_id || 0),
+        jobber_expense_description_field_id: Number(settingsData.settings?.jobber_expense_description_field_id || 0),
+        jobber_expense_total_field_id: Number(settingsData.settings?.jobber_expense_total_field_id || 0),
         google_drive_enabled: !!settingsData.settings?.google_drive_enabled,
         google_drive_folder_id: settingsData.settings?.google_drive_folder_id || '',
         quickbooks_enabled: !!settingsData.settings?.quickbooks_enabled,
@@ -281,6 +293,46 @@ const IntegrationsEditor: React.FC = () => {
               onChange={(value) => handleSettingChange('jobber_job_name_field_id', value)}
             />
           </fieldset>
+
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <div className="flex items-center mb-4">
+              <input
+                type="checkbox"
+                id="jobberExpenseEnabled"
+                checked={settings.jobber_expense_enabled}
+                onChange={(e) => handleSettingChange('jobber_expense_enabled', e.target.checked)}
+                className="w-4 h-4 mr-2"
+              />
+              <label htmlFor="jobberExpenseEnabled">Enable Jobber expense creation</label>
+            </div>
+
+            <fieldset
+              disabled={!settings.jobber_enabled || !settings.jobber_expense_enabled}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4 disabled:opacity-50"
+            >
+              <FieldMappingSelect
+                label="Expense title field"
+                value={settings.jobber_expense_title_field_id}
+                options={customFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_title_field_id', value)}
+              />
+              <FieldMappingSelect
+                label="Expense description field"
+                value={settings.jobber_expense_description_field_id}
+                options={customFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_description_field_id', value)}
+              />
+              <FieldMappingSelect
+                label="Expense total field"
+                value={settings.jobber_expense_total_field_id}
+                options={customFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_total_field_id', value)}
+              />
+            </fieldset>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              On approval, a matched receipt can create a Jobber expense linked to the selected job using the mapped Paperless custom fields when available.
+            </p>
+          </div>
         </IntegrationCard>
 
         <IntegrationCard

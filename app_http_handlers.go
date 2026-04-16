@@ -233,6 +233,16 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 			} else {
 				result.JobberApplied = true
 			}
+
+			if document.CreateJobberExpense {
+				expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
+				if err != nil {
+					result.JobberExpenseError = err.Error()
+				} else {
+					result.JobberExpenseCreated = true
+					result.JobberExpenseID = expenseResult.ExpenseID
+				}
+			}
 		}
 
 		if document.UploadToGoogleDrive {

@@ -120,6 +120,11 @@ type Settings struct {
 	JobberJobNumberFieldID           int    `json:"jobber_job_number_field_id"`
 	JobberClientFieldID              int    `json:"jobber_client_field_id"`
 	JobberJobNameFieldID             int    `json:"jobber_job_name_field_id"`
+	JobberExpenseEnabled             bool   `json:"jobber_expense_enabled"`
+	JobberExpenseTitleFieldID        int    `json:"jobber_expense_title_field_id"`
+	JobberExpenseDescriptionFieldID  int    `json:"jobber_expense_description_field_id"`
+	JobberExpenseDateFieldID         int    `json:"jobber_expense_date_field_id"`
+	JobberExpenseTotalFieldID        int    `json:"jobber_expense_total_field_id"`
 	GoogleDriveEnabled               bool   `json:"google_drive_enabled"`
 	GoogleDriveFolderID              string `json:"google_drive_folder_id"`
 	QuickBooksEnabled                bool   `json:"quickbooks_enabled"`
@@ -143,6 +148,7 @@ type DocumentSuggestion struct {
 	CustomFieldsEnable     bool                    `json:"custom_fields_enable"`
 	JobberCandidates       []JobberMatchCandidate  `json:"jobber_candidates,omitempty"`
 	SelectedJobberMatchID  string                  `json:"selected_jobber_match_id,omitempty"`
+	CreateJobberExpense    bool                    `json:"create_jobber_expense,omitempty"`
 	UploadToGoogleDrive    bool                    `json:"upload_to_google_drive,omitempty"`
 }
 
@@ -181,6 +187,9 @@ type DocumentIntegrationResult struct {
 	PaperlessUpdated      bool   `json:"paperless_updated"`
 	JobberApplied         bool   `json:"jobber_applied,omitempty"`
 	JobberError           string `json:"jobber_error,omitempty"`
+	JobberExpenseCreated  bool   `json:"jobber_expense_created,omitempty"`
+	JobberExpenseID       string `json:"jobber_expense_id,omitempty"`
+	JobberExpenseError    string `json:"jobber_expense_error,omitempty"`
 	GoogleDriveUploaded   bool   `json:"google_drive_uploaded,omitempty"`
 	GoogleDriveFileID     string `json:"google_drive_file_id,omitempty"`
 	GoogleDriveURL        string `json:"google_drive_url,omitempty"`

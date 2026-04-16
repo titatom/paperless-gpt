@@ -15,6 +15,7 @@ func defaultSettings() Settings {
 		RestrictCorrespondentsToExisting: false,
 		RestrictDocumentTypesToExisting:  false,
 		JobberEnabled:                    false,
+		JobberExpenseEnabled:             false,
 		GoogleDriveEnabled:               false,
 		QuickBooksEnabled:                false,
 	}

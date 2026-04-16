@@ -16,6 +16,7 @@ interface SuggestionCardProps {
   onCustomFieldSuggestionToggle: (docId: number, fieldId: number) => void;
   onJobberMatchChange: (docId: number, selectedJobId: string) => void;
   onGoogleDriveToggle: (docId: number, enabled: boolean) => void;
+  onJobberExpenseToggle: (docId: number, enabled: boolean) => void;
   jobberConnected: boolean;
   googleDriveConnected: boolean;
   integrationResult?: DocumentIntegrationResult;
@@ -35,6 +36,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   onCustomFieldSuggestionToggle,
   onJobberMatchChange,
   onGoogleDriveToggle,
+  onJobberExpenseToggle,
   jobberConnected,
   googleDriveConnected,
   integrationResult,
@@ -271,6 +273,32 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
+              id={`jobber-expense-${suggestion.id}`}
+              checked={suggestion.create_jobber_expense ?? false}
+              disabled={!jobberConnected || !suggestion.selected_jobber_match_id}
+              onChange={(e) => onJobberExpenseToggle(suggestion.id, e.target.checked)}
+              className="w-4 h-4 mt-1"
+            />
+            <div>
+              <label
+                htmlFor={`jobber-expense-${suggestion.id}`}
+                className="font-medium text-gray-700 dark:text-gray-300"
+              >
+                Create Jobber expense
+              </label>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {!jobberConnected
+                  ? "Connect Jobber in Settings to enable expense creation."
+                  : !suggestion.selected_jobber_match_id
+                    ? "Select a Jobber job first."
+                    : "Creates an expense linked to the selected Jobber job using the approved document details."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
               id={`google-drive-${suggestion.id}`}
               checked={suggestion.upload_to_google_drive ?? false}
               disabled={!googleDriveConnected}
@@ -300,6 +328,12 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               <h4 className="font-semibold text-gray-700 dark:text-gray-300">Last apply result</h4>
               {integrationResult?.jobber_applied && (
                 <p className="mt-1 text-green-700 dark:text-green-300">Jobber fields saved to Paperless.</p>
+              )}
+              {integrationResult?.jobber_expense_created && (
+                <p className="mt-1 text-green-700 dark:text-green-300">
+                  Jobber expense created
+                  {integrationResult.jobber_expense_id ? ` (ID: ${integrationResult.jobber_expense_id})` : "."}
+                </p>
               )}
               {integrationResult?.jobber_error && (
                 <p className="mt-1 text-red-700 dark:text-red-300">Jobber: {integrationResult.jobber_error}</p>

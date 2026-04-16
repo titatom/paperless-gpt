@@ -50,6 +50,9 @@ export interface DocumentIntegrationResult {
   paperless_updated: boolean;
   jobber_applied: boolean;
   jobber_error?: string;
+  jobber_expense_created?: boolean;
+  jobber_expense_id?: string;
+  jobber_expense_error?: string;
   google_drive_uploaded: boolean;
   google_drive_error?: string;
   google_drive_file_id?: string;
@@ -77,6 +80,7 @@ export interface DocumentSuggestion {
   suggested_custom_fields?: CustomFieldSuggestion[];
   jobber_candidates?: JobberMatchCandidate[];
   selected_jobber_match_id?: string;
+  create_jobber_expense?: boolean;
   upload_to_google_drive?: boolean;
 }
 
@@ -197,6 +201,7 @@ const DocumentProcessor: React.FC = () => {
         })),
         jobber_candidates: [],
         selected_jobber_match_id: suggestion.selected_jobber_match_id || "",
+        create_jobber_expense: !!suggestion.create_jobber_expense,
         upload_to_google_drive: !!suggestion.upload_to_google_drive,
       }));
 
@@ -285,15 +290,29 @@ const DocumentProcessor: React.FC = () => {
   const handleJobberSelectionChange = (docId: number, selectedJobberMatchId: string) => {
     setSuggestions((prevSuggestions) =>
       prevSuggestions.map((doc) =>
-        doc.id === docId ? { ...doc, selected_jobber_match_id: selectedJobberMatchId } : doc
+        doc.id === docId
+          ? {
+              ...doc,
+              selected_jobber_match_id: selectedJobberMatchId,
+              create_jobber_expense: selectedJobberMatchId ? doc.create_jobber_expense : false,
+            }
+          : doc
       )
     );
   };
 
-  const handleGoogleDriveToggle = (docId: number) => {
+  const handleJobberExpenseToggle = (docId: number, enabled: boolean) => {
     setSuggestions((prevSuggestions) =>
       prevSuggestions.map((doc) =>
-        doc.id === docId ? { ...doc, upload_to_google_drive: !doc.upload_to_google_drive } : doc
+        doc.id === docId ? { ...doc, create_jobber_expense: enabled } : doc
+      )
+    );
+  };
+
+  const handleGoogleDriveToggle = (docId: number, enabled: boolean) => {
+    setSuggestions((prevSuggestions) =>
+      prevSuggestions.map((doc) =>
+        doc.id === docId ? { ...doc, upload_to_google_drive: enabled } : doc
       )
     );
   };
@@ -526,6 +545,7 @@ const DocumentProcessor: React.FC = () => {
           onCreatedDateChange={handleCreatedDateChange}
           onCustomFieldSuggestionToggle={handleCustomFieldSuggestionToggle}
           onJobberMatchChange={handleJobberSelectionChange}
+          onJobberExpenseToggle={handleJobberExpenseToggle}
           onGoogleDriveToggle={handleGoogleDriveToggle}
           onBack={resetSuggestions}
           onUpdate={handleUpdateDocuments}
