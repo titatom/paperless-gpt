@@ -123,11 +123,11 @@ func (e providerNotConfiguredError) Error() string {
 func getIntegrationProvider(provider string) integrationProvider {
 	switch provider {
 	case integrationProviderJobber:
-		return jobberProvider{}
+		return newJobberProvider()
 	case integrationProviderGoogleDrive:
-		return googleDriveProvider{}
+		return newGoogleDriveProvider()
 	case integrationProviderQuickBooks:
-		return quickBooksProvider{}
+		return newQuickBooksProvider()
 	default:
 		return nil
 	}
@@ -1101,6 +1101,23 @@ type jobberProvider struct {
 	oauthProviderBase
 }
 
+func newJobberProvider() jobberProvider {
+	return jobberProvider{
+		oauthProviderBase: oauthProviderBase{
+			name:         integrationProviderJobber,
+			clientID:     strings.TrimSpace(os.Getenv("JOBBER_CLIENT_ID")),
+			clientSecret: strings.TrimSpace(os.Getenv("JOBBER_CLIENT_SECRET")),
+			authURL:      "https://api.getjobber.com/api/oauth/authorize",
+			tokenURL:     "https://api.getjobber.com/api/oauth/token",
+			scopes: []string{
+				"read_clients",
+				"read_jobs",
+				"write_expenses",
+			},
+		},
+	}
+}
+
 func (p jobberProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {
 	validConn, err := p.ensureFreshToken(ctx, nil, conn)
 	if err != nil {
@@ -1148,6 +1165,24 @@ func (p jobberProvider) ensureFreshToken(ctx context.Context, db *gorm.DB, conn 
 
 type googleDriveProvider struct {
 	oauthProviderBase
+}
+
+func newGoogleDriveProvider() googleDriveProvider {
+	return googleDriveProvider{
+		oauthProviderBase: oauthProviderBase{
+			name:         integrationProviderGoogleDrive,
+			clientID:     strings.TrimSpace(os.Getenv("GOOGLE_DRIVE_CLIENT_ID")),
+			clientSecret: strings.TrimSpace(os.Getenv("GOOGLE_DRIVE_CLIENT_SECRET")),
+			authURL:      "https://accounts.google.com/o/oauth2/auth",
+			tokenURL:     "https://oauth2.googleapis.com/token",
+			scopes: []string{
+				"https://www.googleapis.com/auth/drive.file",
+				"openid",
+				"profile",
+				"email",
+			},
+		},
+	}
 }
 
 func (p googleDriveProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {
@@ -1214,6 +1249,21 @@ func (p googleDriveProvider) ensureFreshToken(ctx context.Context, db *gorm.DB, 
 
 type quickBooksProvider struct {
 	oauthProviderBase
+}
+
+func newQuickBooksProvider() quickBooksProvider {
+	return quickBooksProvider{
+		oauthProviderBase: oauthProviderBase{
+			name:         integrationProviderQuickBooks,
+			clientID:     strings.TrimSpace(os.Getenv("QUICKBOOKS_CLIENT_ID")),
+			clientSecret: strings.TrimSpace(os.Getenv("QUICKBOOKS_CLIENT_SECRET")),
+			authURL:      "https://appcenter.intuit.com/connect/oauth2",
+			tokenURL:     "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+			scopes: []string{
+				"com.intuit.quickbooks.accounting",
+			},
+		},
+	}
 }
 
 func (p quickBooksProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {

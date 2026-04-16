@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -81,6 +82,58 @@ func TestIssueAndConsumeReceiptAccessToken(t *testing.T) {
 	}
 	if record2.DocumentID != 42 {
 		t.Fatalf("expected second lookup document ID 42, got %d", record2.DocumentID)
+	}
+}
+
+func TestGetIntegrationProviderJobberUsesCurrentEnv(t *testing.T) {
+	t.Setenv("JOBBER_CLIENT_ID", "jobber-client-id")
+	t.Setenv("JOBBER_CLIENT_SECRET", "jobber-client-secret")
+
+	provider := getIntegrationProvider(integrationProviderJobber)
+	if provider == nil {
+		t.Fatal("expected jobber provider")
+	}
+
+	configured, reason := provider.Configured()
+	if !configured {
+		t.Fatalf("expected jobber provider to be configured, got reason %q", reason)
+	}
+}
+
+func TestGetIntegrationProviderJobberRequiresBothEnvVars(t *testing.T) {
+	originalID, hadID := os.LookupEnv("JOBBER_CLIENT_ID")
+	originalSecret, hadSecret := os.LookupEnv("JOBBER_CLIENT_SECRET")
+	defer func() {
+		if hadID {
+			_ = os.Setenv("JOBBER_CLIENT_ID", originalID)
+		} else {
+			_ = os.Unsetenv("JOBBER_CLIENT_ID")
+		}
+		if hadSecret {
+			_ = os.Setenv("JOBBER_CLIENT_SECRET", originalSecret)
+		} else {
+			_ = os.Unsetenv("JOBBER_CLIENT_SECRET")
+		}
+	}()
+
+	if err := os.Unsetenv("JOBBER_CLIENT_ID"); err != nil {
+		t.Fatalf("Unsetenv(JOBBER_CLIENT_ID) error = %v", err)
+	}
+	if err := os.Unsetenv("JOBBER_CLIENT_SECRET"); err != nil {
+		t.Fatalf("Unsetenv(JOBBER_CLIENT_SECRET) error = %v", err)
+	}
+
+	provider := getIntegrationProvider(integrationProviderJobber)
+	if provider == nil {
+		t.Fatal("expected jobber provider")
+	}
+
+	configured, reason := provider.Configured()
+	if configured {
+		t.Fatal("expected jobber provider to be unconfigured without env vars")
+	}
+	if reason == "" {
+		t.Fatal("expected non-empty reason when env vars are missing")
 	}
 }
 
