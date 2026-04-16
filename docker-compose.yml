@@ -5,3 +5,25 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    # --- Security (recommended when exposed to the internet) ---
+    # Uncomment and configure the variables below to enable authentication,
+    # rate limiting, and trusted-proxy detection.
+    #
+    # environment:
+    #   # HTTP Basic Auth (browser login dialog)
+    #   AUTH_USERNAME: "your-username"
+    #   AUTH_PASSWORD: "your-strong-password"
+    #
+    #   # Bearer token (API / programmatic access)
+    #   AUTH_TOKEN: "your-random-secret-token"
+    #
+    #   # Trusted reverse-proxy IPs/CIDRs (comma-separated).
+    #   # Set to your proxy IP so X-Forwarded-For is honoured correctly.
+    #   TRUSTED_PROXIES: "172.20.0.1"
+    #
+    #   # Per-IP rate limiting (requests/second sustained, burst)
+    #   HTTP_RATE_LIMIT_RPS: "10"
+    #   HTTP_RATE_LIMIT_BURST: "30"
+    #
+    #   # Maximum request body size (bytes)
+    #   MAX_BODY_BYTES: "10485760"

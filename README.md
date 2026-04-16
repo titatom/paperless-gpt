@@ -646,6 +646,25 @@ For best results with the enhanced OCR features:
 | `IMAGE_MAX_FILE_BYTES`              | Maximum JPEG file size in bytes for rendered page images. Images exceeding this are compressed or resized.                                                                                     | No       | 10485760                   |
 | `CORRESPONDENT_BLACK_LIST`          | A comma-separated list of names to exclude from the correspondents suggestions. Example: `John Doe, Jane Smith`.                                                                              | No       |                            |
 
+#### Security Variables
+
+> **Important:** When exposing paperless-gpt to the internet you should configure at least one authentication mechanism.
+
+| Variable                | Description                                                                                                                             | Required | Default          |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
+| `AUTH_USERNAME`         | Username for HTTP Basic Auth. Must be set together with `AUTH_PASSWORD`.                                                                | No       |                  |
+| `AUTH_PASSWORD`         | Password for HTTP Basic Auth. Must be set together with `AUTH_USERNAME`.                                                                | No       |                  |
+| `AUTH_TOKEN`            | Static bearer token for API authentication. Send as `Authorization: Bearer <token>`. Can be combined with Basic Auth.                  | No       |                  |
+| `TRUSTED_PROXIES`       | Comma-separated list of trusted reverse-proxy IPs/CIDRs (e.g. `10.0.0.1,172.16.0.0/12`). Controls which `X-Forwarded-For` headers are trusted for rate limiting and IP detection. | No | `127.0.0.1,::1` |
+| `HTTP_RATE_LIMIT_RPS`   | Maximum sustained HTTP requests per second per client IP (0 disables limiting).                                                         | No       | `10`             |
+| `HTTP_RATE_LIMIT_BURST` | Maximum burst size for HTTP rate limiting.                                                                                              | No       | `30`             |
+| `MAX_BODY_BYTES`        | Maximum allowed HTTP request body size in bytes.                                                                                        | No       | `10485760` (10 MiB) |
+
+**Notes:**
+- When neither `AUTH_USERNAME`/`AUTH_PASSWORD` nor `AUTH_TOKEN` is set, a warning is logged and no authentication is enforced. This is intentional for backward compatibility with internal/trusted-network deployments.
+- The OAuth callback routes (`/api/integrations/*/oauth/callback`) and Jobber receipt download routes (`/api/integrations/jobber/receipt/*`) are always exempt from authentication because they are driven by browser redirects from third-party servers.
+- All HTTP responses include defensive security headers (`X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`) regardless of authentication settings.
+
 ### Custom Prompt Templates
 
 paperless-gpt's flexible **prompt templates** let you shape how AI responds. While you can still manually manage files, the recommended way to customize prompts is through the **Settings** page in the web UI.

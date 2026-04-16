@@ -370,8 +370,24 @@ func main() {
 	// Start Background-Tasks for Auto-Tagging and Auto-OCR (if enabled)
 	StartBackgroundTasks(ctx, app)
 
+	// Load security configuration
+	secCfg := loadSecurityConfig()
+
 	// Create a Gin router with default middleware (logger and recovery)
 	router := gin.Default()
+
+	// Configure trusted proxies so that Gin honours X-Forwarded-For only from
+	// known upstream proxies.  An explicit empty list disables proxy trust
+	// entirely; a non-empty list restricts it to those CIDRs/IPs.
+	if err := router.SetTrustedProxies(secCfg.TrustedProxies); err != nil {
+		log.Warnf("Could not set trusted proxies: %v", err)
+	}
+
+	// Apply global security middleware
+	router.Use(securityHeadersMiddleware())
+	router.Use(maxBodySizeMiddleware(secCfg.MaxBodyBytes))
+	router.Use(rateLimitMiddleware(secCfg.RateLimitRPS, secCfg.RateLimitBurst))
+	router.Use(authMiddleware(secCfg))
 
 	// API routes
 	api := router.Group("/api")
