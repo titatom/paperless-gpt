@@ -86,6 +86,7 @@ var (
 	doclingOCRPipeline            = os.Getenv("DOCLING_OCR_PIPELINE")
 	doclingOCREngine              = os.Getenv("DOCLING_OCR_ENGINE")
 	googleThinkingBudget          *int32 // Will be parsed from GOOGLEAI_THINKING_BUDGET
+	appPublicURL                  = strings.TrimRight(os.Getenv("APP_PUBLIC_URL"), "/")
 
 	// Templates
 	titleTemplate         *template.Template
@@ -103,6 +104,13 @@ var (
 	settingsMutex       sync.RWMutex
 	customFieldsCache   []CustomField
 	customFieldsCacheMu sync.RWMutex
+
+	jobberClientID       = os.Getenv("JOBBER_CLIENT_ID")
+	jobberClientSecret   = os.Getenv("JOBBER_CLIENT_SECRET")
+	googleDriveClientID  = os.Getenv("GOOGLE_DRIVE_CLIENT_ID")
+	googleDriveSecret    = os.Getenv("GOOGLE_DRIVE_CLIENT_SECRET")
+	quickBooksClientID   = os.Getenv("QUICKBOOKS_CLIENT_ID")
+	quickBooksClientSecret = os.Getenv("QUICKBOOKS_CLIENT_SECRET")
 )
 
 // refreshCustomFieldsCache fetches custom fields from Paperless and updates the cache.
@@ -123,6 +131,7 @@ func refreshCustomFieldsCache(client ClientInterface) {
 type App struct {
 	Client             ClientInterface
 	Database           *gorm.DB
+	Integrations       *IntegrationsService
 	LLM                llms.Model
 	VisionLLM          llms.Model
 	ocrProvider        ocr.Provider      // OCR provider interface
@@ -183,6 +192,9 @@ func main() {
 
 	// Initialize Database
 	database := InitializeDB()
+
+	// Initialize Integrations
+	integrations := NewIntegrationsService(database)
 
 	// Load Templates
 	if err := loadTemplates(); err != nil {
@@ -322,6 +334,7 @@ func main() {
 	app := &App{
 		Client:             client,
 		Database:           database,
+		Integrations:       integrations,
 		LLM:                llm,
 		VisionLLM:          visionLlm,
 		ocrProvider:        ocrProvider,
@@ -379,6 +392,13 @@ func main() {
 		api.POST("/prompts", updatePromptsHandler)
 		api.GET("/settings", app.getSettingsHandler)
 		api.POST("/settings", app.updateSettingsHandler)
+		api.GET("/integrations", app.getIntegrationsStatusHandler)
+		api.GET("/integrations/:provider/status", app.getIntegrationStatusHandler)
+		api.POST("/integrations/:provider/connect/start", app.startIntegrationConnectHandler)
+		api.GET("/integrations/:provider/oauth/callback", app.integrationOAuthCallbackHandler)
+		api.POST("/integrations/:provider/disconnect", app.disconnectIntegrationHandler)
+		api.GET("/integrations/jobber/receipt/:token", app.jobberReceiptHandler)
+		api.POST("/integrations/jobber/match-candidates", app.jobberMatchCandidatesHandler)
 
 		// OCR endpoints
 		api.POST("/documents/:id/ocr", app.submitOCRJobHandler)

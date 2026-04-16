@@ -3,7 +3,7 @@ import ArrowTopRightOnSquareIcon from "@heroicons/react/24/outline/ArrowTopRight
 import EyeIcon from "@heroicons/react/24/outline/EyeIcon";
 import TrashIcon from "@heroicons/react/24/outline/TrashIcon";
 import { ReactTags } from "react-tag-autocomplete";
-import { DocumentSuggestion, TagOption } from "../DocumentProcessor";
+import { DocumentIntegrationResult, DocumentSuggestion, TagOption } from "../DocumentProcessor";
 import DocumentPreviewModal from "./DocumentPreviewModal";
 
 interface SuggestionCardProps {
@@ -16,6 +16,12 @@ interface SuggestionCardProps {
   onDocumentTypeChange: (docId: number, documentType: string) => void;
   onCreatedDateChange: (docId: number, createdDate: string) => void;
   onCustomFieldSuggestionToggle: (docId: number, fieldId: number) => void;
+  onJobberMatchChange: (docId: number, selectedJobId: string) => void;
+  onGoogleDriveToggle: (docId: number, enabled: boolean) => void;
+  onJobberExpenseToggle: (docId: number, enabled: boolean) => void;
+  jobberConnected: boolean;
+  googleDriveConnected: boolean;
+  integrationResult?: DocumentIntegrationResult;
   paperlessUrl?: string;
   onDelete?: (documentId: number) => void;
 }
@@ -30,6 +36,12 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   onDocumentTypeChange,
   onCreatedDateChange,
   onCustomFieldSuggestionToggle,
+  onJobberMatchChange,
+  onGoogleDriveToggle,
+  onJobberExpenseToggle,
+  jobberConnected,
+  googleDriveConnected,
+  integrationResult,
   paperlessUrl,
   onDelete,
 }) => {
@@ -102,6 +114,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               </button>
             ))}
         </div>
+
         <div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {document.title}
@@ -128,6 +141,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             )}
           </div>
         </div>
+
         <div className="mt-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Suggested Title
@@ -138,6 +152,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             onChange={(e) => onTitleChange(suggestion.id, e.target.value)}
             className="mt-2 w-full rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
           />
+
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Suggested Tags
@@ -185,6 +200,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               }}
             />
           </div>
+
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Suggested Correspondent
@@ -197,6 +213,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               placeholder="Correspondent"
             />
           </div>
+
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Suggested Document Type
@@ -209,6 +226,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               placeholder="Document Type"
             />
           </div>
+
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Suggested Created Date
@@ -221,6 +239,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               placeholder="Created Date"
             />
           </div>
+
           {suggestion.suggested_custom_fields && suggestion.suggested_custom_fields.length > 0 && (
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -248,6 +267,134 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               </div>
             </div>
           )}
+
+          <div className="mt-6 space-y-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Jobber Match
+              </label>
+              <select
+                value={suggestion.selected_jobber_match_id || ""}
+                onChange={(e) => onJobberMatchChange(suggestion.id, e.target.value)}
+                disabled={!jobberConnected || !suggestion.jobber_candidates?.length}
+                className="mt-2 w-full rounded border border-gray-300 px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+              >
+                <option value="">
+                  {!jobberConnected
+                    ? "Connect Jobber in Settings"
+                    : suggestion.jobber_candidates?.length
+                      ? "No Jobber match"
+                      : "No Jobber matches found"}
+                </option>
+                {suggestion.jobber_candidates?.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    #{candidate.job_number} - {candidate.client_name} - {candidate.job_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id={`jobber-expense-${suggestion.id}`}
+                checked={suggestion.create_jobber_expense ?? false}
+                disabled={!jobberConnected || !suggestion.selected_jobber_match_id}
+                onChange={(e) => onJobberExpenseToggle(suggestion.id, e.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <div>
+                <label
+                  htmlFor={`jobber-expense-${suggestion.id}`}
+                  className="font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Create Jobber expense
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {!jobberConnected
+                    ? "Connect Jobber in Settings to enable expense creation."
+                    : !suggestion.selected_jobber_match_id
+                      ? "Select a Jobber job first."
+                      : "Creates an expense linked to the selected Jobber job using the approved document details."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id={`google-drive-${suggestion.id}`}
+                checked={suggestion.upload_to_google_drive ?? false}
+                disabled={!googleDriveConnected}
+                onChange={(e) => onGoogleDriveToggle(suggestion.id, e.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <div>
+                <label
+                  htmlFor={`google-drive-${suggestion.id}`}
+                  className="font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Upload to Google Drive
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {!googleDriveConnected
+                    ? "Connect Google Drive in Settings to enable uploads."
+                    : "Uploads the approved Paperless file to the configured folder."}
+                </p>
+              </div>
+            </div>
+
+            {(integrationResult?.jobber_applied ||
+              integrationResult?.jobber_expense_created ||
+              integrationResult?.jobber_error ||
+              integrationResult?.google_drive_uploaded ||
+              integrationResult?.google_drive_error) && (
+              <div className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
+                <h4 className="font-semibold text-gray-700 dark:text-gray-300">Last apply result</h4>
+                {integrationResult?.jobber_applied && (
+                  <p className="mt-1 text-green-700 dark:text-green-300">
+                    Jobber fields saved to Paperless.
+                  </p>
+                )}
+                {integrationResult?.jobber_expense_created && (
+                  <p className="mt-1 text-green-700 dark:text-green-300">
+                    Jobber expense created
+                    {integrationResult.jobber_expense_id
+                      ? ` (ID: ${integrationResult.jobber_expense_id})`
+                      : "."}
+                  </p>
+                )}
+                {integrationResult?.jobber_error && (
+                  <p className="mt-1 text-red-700 dark:text-red-300">
+                    Jobber: {integrationResult.jobber_error}
+                  </p>
+                )}
+                {integrationResult?.google_drive_uploaded && (
+                  <p className="mt-1 text-green-700 dark:text-green-300">
+                    Google Drive upload completed
+                    {integrationResult.google_drive_url ? (
+                      <>
+                        {" "}
+                        <a
+                          className="underline"
+                          href={integrationResult.google_drive_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open file
+                        </a>
+                      </>
+                    ) : "."}
+                  </p>
+                )}
+                {integrationResult?.google_drive_error && (
+                  <p className="mt-1 text-red-700 dark:text-red-300">
+                    Google Drive: {integrationResult.google_drive_error}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

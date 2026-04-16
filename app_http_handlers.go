@@ -130,14 +130,19 @@ func (app *App) updateSettingsHandler(c *gin.Context) {
 	settingsMutex.Lock()
 	defer settingsMutex.Unlock()
 
-	var newSettings Settings
-	if err := c.ShouldBindJSON(&newSettings); err != nil {
+	var patch map[string]interface{}
+	if err := c.ShouldBindJSON(&patch); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
 
-	// Update the global settings variable
-	settings = newSettings
+	merged, err := mergeSettingsPatch(settings, patch)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	settings = merged
 
 	// Save the updated settings to file
 	if err := saveSettingsLocked(); err != nil {
@@ -215,7 +220,255 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusOK)
+	results := make([]DocumentIntegrationResult, 0, len(documents))
+	for _, document := range documents {
+		result := DocumentIntegrationResult{
+			DocumentID:       document.ID,
+			PaperlessUpdated: true,
+		}
+
+		if selectedCandidate, ok := getSelectedJobberCandidate(document); ok {
+			if err := app.applyJobberSelection(ctx, document.ID, selectedCandidate); err != nil {
+				result.JobberError = err.Error()
+			} else {
+				result.JobberApplied = true
+			}
+
+			if document.CreateJobberExpense {
+				expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
+				if err != nil {
+					result.JobberExpenseError = err.Error()
+				} else {
+					result.JobberExpenseCreated = true
+					result.JobberExpenseID = expenseResult.ExpenseID
+				}
+			}
+		}
+
+		if document.UploadToGoogleDrive {
+			uploadResult, err := app.Integrations.UploadDocumentToGoogleDrive(ctx, app.Client, document.ID, settings.GoogleDriveFolderID)
+			if err != nil {
+				result.GoogleDriveError = err.Error()
+			} else {
+				result.GoogleDriveUploaded = true
+				result.GoogleDriveFileID = uploadResult.FileID
+				result.GoogleDriveURL = uploadResult.FileURL
+			}
+		}
+
+		results = append(results, result)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"results": results})
+}
+
+func (app *App) getIntegrationsStatusHandler(c *gin.Context) {
+	statuses := []IntegrationConnectionStatus{
+		app.Integrations.Status("jobber"),
+		app.Integrations.Status("google_drive"),
+		app.Integrations.Status("quickbooks"),
+	}
+
+	c.JSON(http.StatusOK, gin.H{"providers": statuses})
+}
+
+func (app *App) getIntegrationStatusHandler(c *gin.Context) {
+	provider := c.Param("provider")
+	status := app.Integrations.Status(provider)
+	if status.Provider == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Unknown provider"})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+func (app *App) startIntegrationConnectHandler(c *gin.Context) {
+	provider := c.Param("provider")
+	redirectURL := currentBaseURL(c) + "/api/integrations/" + provider + "/oauth/callback"
+	authURL, err := app.Integrations.BeginOAuth(c.Request.Context(), provider, redirectURL)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"redirect_url": authURL})
+}
+
+func (app *App) integrationOAuthCallbackHandler(c *gin.Context) {
+	provider := c.Param("provider")
+	redirectURL := currentBaseURL(c) + "/api/integrations/" + provider + "/oauth/callback"
+	if err := app.Integrations.HandleOAuthCallback(c.Request.Context(), provider, c.Query("code"), c.Query("state"), redirectURL); err != nil {
+		c.String(http.StatusBadRequest, "Integration connection failed: %v", err)
+		return
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, `<html><body><script>window.close && window.close(); if (window.opener) { window.opener.location.reload(); }</script><p>Integration connected. You can close this window.</p></body></html>`)
+}
+
+func (app *App) disconnectIntegrationHandler(c *gin.Context) {
+	provider := c.Param("provider")
+	if err := app.Integrations.Disconnect(c.Request.Context(), provider); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Disconnected"})
+}
+
+func (app *App) jobberReceiptHandler(c *gin.Context) {
+	token := c.Param("token")
+	if strings.TrimSpace(token) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing receipt token"})
+		return
+	}
+
+	share, err := app.Integrations.ConsumeReceiptAccessToken(c.Request.Context(), token)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Receipt token not found or expired"})
+		return
+	}
+
+	document, err := app.Client.GetDocument(c.Request.Context(), share.DocumentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load document: %v", err)})
+		return
+	}
+
+	content, err := app.Client.DownloadPDF(c.Request.Context(), document)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to download document: %v", err)})
+		return
+	}
+
+	filename := strings.TrimSpace(document.ArchivedFileName)
+	if filename == "" {
+		filename = strings.TrimSpace(document.OriginalFileName)
+	}
+	if filename == "" {
+		filename = fmt.Sprintf("document-%d.pdf", share.DocumentID)
+	}
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	c.Writer.WriteHeader(http.StatusOK)
+	_, _ = c.Writer.Write(content)
+}
+
+func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
+	var req struct {
+		DocumentIDs []int `json:"document_ids"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	results := make(map[int][]JobberMatchCandidate, len(req.DocumentIDs))
+	for _, documentID := range req.DocumentIDs {
+		document, err := app.Client.GetDocument(c.Request.Context(), documentID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error fetching document %d: %v", documentID, err)})
+			return
+		}
+
+		candidates, err := app.Integrations.GetJobberCandidates(c.Request.Context(), document)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error fetching Jobber candidates for document %d: %v", documentID, err)})
+			return
+		}
+
+		results[documentID] = candidates
+	}
+
+	c.JSON(http.StatusOK, gin.H{"candidates": results})
+}
+
+func currentBaseURL(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if forwardedProto := c.GetHeader("X-Forwarded-Proto"); forwardedProto != "" {
+		scheme = forwardedProto
+	}
+	host := c.GetHeader("X-Forwarded-Host")
+	if host == "" {
+		host = c.Request.Host
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+func getSelectedJobberCandidate(document DocumentSuggestion) (JobberMatchCandidate, bool) {
+	if document.SelectedJobberMatchID == "" {
+		return JobberMatchCandidate{}, false
+	}
+
+	for _, candidate := range document.JobberCandidates {
+		if candidate.ID == document.SelectedJobberMatchID {
+			return candidate, true
+		}
+	}
+
+	return JobberMatchCandidate{}, false
+}
+
+func (app *App) applyJobberSelection(ctx context.Context, documentID int, candidate JobberMatchCandidate) error {
+	settingsMutex.RLock()
+	fieldValues := map[int]interface{}{}
+	if settings.JobberJobIDFieldID > 0 {
+		fieldValues[settings.JobberJobIDFieldID] = candidate.ID
+	}
+	if settings.JobberJobNumberFieldID > 0 {
+		fieldValues[settings.JobberJobNumberFieldID] = candidate.JobNumber
+	}
+	if settings.JobberClientFieldID > 0 {
+		fieldValues[settings.JobberClientFieldID] = candidate.ClientName
+	}
+	if settings.JobberJobNameFieldID > 0 {
+		fieldValues[settings.JobberJobNameFieldID] = candidate.JobName
+	}
+	settingsMutex.RUnlock()
+
+	if len(fieldValues) == 0 {
+		return nil
+	}
+
+	return app.Client.UpsertDocumentCustomFields(ctx, documentID, fieldValues, app.Database)
+}
+
+func mergeSettingsPatch(current Settings, patch map[string]interface{}) (Settings, error) {
+	rawCurrent, err := json.Marshal(current)
+	if err != nil {
+		return Settings{}, err
+	}
+
+	currentMap := map[string]interface{}{}
+	if err := json.Unmarshal(rawCurrent, &currentMap); err != nil {
+		return Settings{}, err
+	}
+
+	for key, value := range patch {
+		currentMap[key] = value
+	}
+
+	rawMerged, err := json.Marshal(currentMap)
+	if err != nil {
+		return Settings{}, err
+	}
+
+	var merged Settings
+	if err := json.Unmarshal(rawMerged, &merged); err != nil {
+		return Settings{}, fmt.Errorf("invalid settings payload: %w", err)
+	}
+
+	if merged.CustomFieldsWriteMode == "" {
+		merged.CustomFieldsWriteMode = current.CustomFieldsWriteMode
+	}
+
+	return merged, nil
 }
 
 func (app *App) submitOCRJobHandler(c *gin.Context) {

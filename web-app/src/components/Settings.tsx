@@ -2,6 +2,7 @@ import React from 'react';
 import PromptsEditor from './PromptsEditor';
 import CustomFieldsEditor from './CustomFieldsEditor';
 import MetadataRestrictionsEditor from './MetadataRestrictionsEditor';
+import IntegrationsEditor from './IntegrationsEditor';
 
 const Settings: React.FC = () => {
   return (
@@ -23,6 +24,10 @@ const Settings: React.FC = () => {
         <PromptsEditor />
         <MetadataRestrictionsEditor />
         <CustomFieldsEditor />
+      </div>
+
+      <div className="p-6 bg-gray-100 dark:bg-gray-900">
+        <IntegrationsEditor />
       </div>
     </main>
   );

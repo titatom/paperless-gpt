@@ -33,6 +33,17 @@ type OCRPageResult struct {
 	UpdatedAt      time.Time
 }
 
+type IntegrationReceiptShare struct {
+	ID         uint `gorm:"primaryKey"`
+	Token      string `gorm:"uniqueIndex;size:255;not null"`
+	Provider   string `gorm:"size:64;index;not null"`
+	DocumentID int    `gorm:"index;not null"`
+	FileName   string `gorm:"size:512"`
+	ExpiresAt  time.Time `gorm:"index;not null"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 // InitializeDB initializes the SQLite database and migrates the schema
 func InitializeDB() *gorm.DB {
 	// Ensure db directory exists
@@ -50,7 +61,7 @@ func InitializeDB() *gorm.DB {
 	}
 
 	// Migrate the schema (create the tables if they don't exist)
-	err = db.AutoMigrate(&ModificationHistory{}, &OCRPageResult{})
+	err = db.AutoMigrate(&ModificationHistory{}, &OCRPageResult{}, &IntegrationConnection{}, &OAuthStateRecord{}, &IntegrationActionLog{}, &IntegrationReceiptShare{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database schema: %v", err)
 	}
