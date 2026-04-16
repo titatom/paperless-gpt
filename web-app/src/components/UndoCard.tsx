@@ -71,37 +71,43 @@ const UndoCard: React.FC<ModificationProps> = ({
     return value;
   };
 
+  const previousTooltipProps =
+    ModField !== "tags" && PreviousValue.length > 100
+      ? { "data-tooltip-id": `tooltip-${ID}-prev` }
+      : {};
+  const newTooltipProps =
+    ModField !== "tags" && NewValue.length > 100
+      ? { "data-tooltip-id": `tooltip-${ID}-new` }
+      : {};
+
   return (
-    <div className="undo-card relative bg-white dark:bg-gray-800 p-4 rounded-md shadow-md">
-      <div className="grid grid-cols-6">
-        <div className="col-span-5"> {/* Left content */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="">
-              <div className="text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold mb-1">
+    <div className="relative rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Date Modified
               </div>
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {DateChanged && formatDate(DateChanged)}
               </div>
             </div>
-            <div className="">
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Document
+              </div>
               <a
                 href={buildPaperlessUrl(paperlessUrl, DocumentID)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                className="text-sm font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
               >
-                <div className="text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold mb-1">
-                  Document ID
-                </div>
-                <div className="text-sm text-gray-700 dark:text-gray-300">
-                  {DocumentID}
-                </div>
+                #{DocumentID}
               </a>
             </div>
-
-            <div className="">
-              <div className="text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold mb-1">
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Modified Field
               </div>
               <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -109,79 +115,78 @@ const UndoCard: React.FC<ModificationProps> = ({
               </div>
             </div>
           </div>
-          <div className="mt-3">
-            <div className="mt-2 space-y-2">
-              <div className={`text-sm flex flex-nowrap ${Undone ? 'line-through' : ''}`}>
-                <span className="text-red-500 dark:text-red-400">Previous: &nbsp;</span>
-                <span
-                  className="text-gray-600 dark:text-gray-300 truncate overflow-hidden flex-shrink-0 whitespace-nowrap flex-1 max-w-full group relative"
-                  { // Add tooltip if value is too long and not tags
-                    ...(ModField !== 'tags' && PreviousValue.length > 100 ? {
-                    'data-tooltip-id': `tooltip-${ID}-prev`
-                  } : {})}
-                >
-                  {formatValue(PreviousValue, ModField)}
-                </span>
+
+          <div className="mt-5 space-y-3">
+            <div className={`rounded-2xl border border-red-100 bg-red-50/60 p-3 dark:border-red-900/40 dark:bg-red-950/20 ${Undone ? "line-through" : ""}`}>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-300">
+                Previous value
               </div>
-              <div className={`text-sm flex flex-nowrap ${Undone ? 'line-through' : ''}`}>
-                <span className="text-green-500 dark:text-green-400">New: &nbsp;</span>
-                <span
-                  className="text-gray-600 dark:text-gray-300 truncate overflow-hidden flex-shrink-0 whitespace-nowrap flex-1 max-w-full group relative"
-                  { // Add tooltip if value is too long and not tags
-                    ...(ModField !== 'tags' && NewValue.length > 100 ? {
-                    'data-tooltip-id': `tooltip-${ID}-new`
-                  } : {})}
-                >
-                  {formatValue(NewValue, ModField)}
-                </span>
+              <div
+                className="min-w-0 text-sm text-gray-700 dark:text-gray-200"
+                {...previousTooltipProps}
+              >
+                {formatValue(PreviousValue, ModField)}
               </div>
             </div>
-            <Tooltip 
-              id={`tooltip-${ID}-prev`} 
-              place="bottom"
-              className="flex-wrap"
-              style={{
-                flexWrap: 'wrap',
-                wordWrap: 'break-word',
-                zIndex: 10,
-                whiteSpace: 'pre-line',
-                textAlign: 'left',
-              }}
-            >
-              {PreviousValue}
-            </Tooltip>
-            <Tooltip 
-              id={`tooltip-${ID}-new`} 
-              place="bottom"
-              className="flex-wrap"
-              style={{
-                flexWrap: 'wrap',
-                wordWrap: 'break-word',
-                zIndex: 10,
-                whiteSpace: 'pre-line',
-                textAlign: 'left',
-              }}
-            >
-              {NewValue}
-            </Tooltip>
+            <div className={`rounded-2xl border border-green-100 bg-green-50/60 p-3 dark:border-green-900/40 dark:bg-green-950/20 ${Undone ? "line-through" : ""}`}>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-300">
+                New value
+              </div>
+              <div
+                className="min-w-0 text-sm text-gray-700 dark:text-gray-200"
+                {...newTooltipProps}
+              >
+                {formatValue(NewValue, ModField)}
+              </div>
+            </div>
           </div>
+          <Tooltip
+            id={`tooltip-${ID}-prev`}
+            place="bottom"
+            className="flex-wrap"
+            style={{
+              flexWrap: "wrap",
+              wordWrap: "break-word",
+              zIndex: 10,
+              whiteSpace: "pre-line",
+              textAlign: "left",
+            }}
+          >
+            {PreviousValue}
+          </Tooltip>
+          <Tooltip
+            id={`tooltip-${ID}-new`}
+            place="bottom"
+            className="flex-wrap"
+            style={{
+              flexWrap: "wrap",
+              wordWrap: "break-word",
+              zIndex: 10,
+              whiteSpace: "pre-line",
+              textAlign: "left",
+            }}
+          >
+            {NewValue}
+          </Tooltip>
         </div>
-        <div className="grid place-items-center"> {/* Button content */}
+
+        <div className="xl:pl-4">
           <button
             onClick={() => onUndo(ID)}
             disabled={Undone}
-            className={`mt-2 mb-2 p-4 text-sm font-medium rounded-md min-w-[100px] max-w-[150px] text-center break-words ${Undone
-              ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700'
-              } transition-colors duration-200`}
+            className={`min-w-[132px] rounded-2xl px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+              Undone
+                ? "cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+                : "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800"
+            }`}
           >
             {Undone ? (
               <>
-                <span className="block text-xs">Undone on</span>
-                <span className="block text-xs">{formatDate(UndoneDate)}</span>
+                <span className="block text-xs uppercase tracking-wide">Undone</span>
+                <span className="mt-1 block text-xs">{formatDate(UndoneDate)}</span>
               </>
             ) : (
-              'Undo'
+              "Undo"
             )}
           </button>
         </div>

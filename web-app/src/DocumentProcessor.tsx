@@ -33,7 +33,7 @@ export interface GenerateSuggestionsRequest {
 
 export interface CustomFieldSuggestion {
   id: number;
-  value: any;
+  value: unknown;
   name: string;
   isSelected: boolean;
 }
@@ -115,6 +115,7 @@ const DocumentProcessor: React.FC = () => {
   const [generateDocumentTypes, setGenerateDocumentTypes] = useState(true);
   const [generateCreatedDate, setGenerateCreatedDate] = useState(true);
   const [generateCustomFields, setGenerateCustomFields] = useState(true);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSelectDocument = (docId: number) => {
@@ -418,7 +419,7 @@ const DocumentProcessor: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
+      <div className="flex min-h-[60vh] items-center justify-center bg-white dark:bg-gray-900">
         <div className="text-xl font-semibold text-gray-800 dark:text-gray-200">
           Loading documents...
         </div>
@@ -426,14 +427,98 @@ const DocumentProcessor: React.FC = () => {
     );
   }
 
+  const generationOptions = [
+    {
+      label: "Titles",
+      description: "Create clearer document titles.",
+      checked: generateTitles,
+      onChange: setGenerateTitles,
+    },
+    {
+      label: "Tags",
+      description: "Suggest tags for easier filing.",
+      checked: generateTags,
+      onChange: setGenerateTags,
+    },
+    {
+      label: "Correspondents",
+      description: "Fill in the sender or source.",
+      checked: generateCorrespondents,
+      onChange: setGenerateCorrespondents,
+    },
+    {
+      label: "Document Types",
+      description: "Classify the document type.",
+      checked: generateDocumentTypes,
+      onChange: setGenerateDocumentTypes,
+    },
+    {
+      label: "Created Date",
+      description: "Extract a likely document date.",
+      checked: generateCreatedDate,
+      onChange: setGenerateCreatedDate,
+    },
+    {
+      label: "Custom Fields",
+      description: "Populate matching custom fields.",
+      checked: generateCustomFields,
+      onChange: setGenerateCustomFields,
+    },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-      <header className="text-center">
-        <h1 className="text-4xl font-bold mb-8">Paperless GPT</h1>
+    <div className="mx-auto max-w-6xl bg-white p-6 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+      <header className="mb-8 rounded-3xl border border-gray-200 bg-gradient-to-br from-white via-blue-50 to-white p-6 shadow-sm dark:border-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
+              Home
+            </p>
+            <h1 className="mt-2 text-4xl font-bold text-gray-900 dark:text-gray-100">
+              Paperless GPT
+            </h1>
+            <p className="mt-3 text-base leading-7 text-gray-600 dark:text-gray-300">
+              Review incoming Paperless documents, choose the metadata you want
+              generated, and apply suggestions only after a final review.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <span className="rounded-full bg-white px-3 py-1 shadow-sm dark:bg-gray-800">
+                1. Select documents
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 shadow-sm dark:bg-gray-800">
+                2. Generate suggestions
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 shadow-sm dark:bg-gray-800">
+                3. Review before applying
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Documents in queue</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {documents.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Selected</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {selectedDocuments.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Filter tag</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {filterTag || "No filter tag configured"}
+              </p>
+            </div>
+          </div>
+        </div>
       </header>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded">
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           {error}
         </div>
       )}
@@ -452,85 +537,100 @@ const DocumentProcessor: React.FC = () => {
           paperlessUrl={paperlessUrl}
           onDeleteDocument={handleDeleteDocument}
         >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200">Documents to Process</h2>
-            <div className="flex space-x-2">
+          <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                  Documents to Process
+                </h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  Select the documents you want to enrich, then choose how much
+                  metadata Paperless GPT should generate.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={reloadDocuments}
+                  disabled={processing}
+                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  <ArrowPathIcon className="h-5 w-5" />
+                  Reload
+                </button>
+                <button
+                  onClick={handleProcessDocuments}
+                  disabled={processing || selectedDocuments.length === 0}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-800"
+                >
+                  {processing
+                    ? "Processing..."
+                    : `Generate Suggestions (${selectedDocuments.length})`}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+                  {selectedDocuments.length} selected
+                </span>
+                <button
+                  onClick={handleSelectAll}
+                  className="rounded-md bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={handleSelectNone}
+                  className="rounded-md bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                >
+                  Select None
+                </button>
+              </div>
+
               <button
-                onClick={reloadDocuments}
-                disabled={processing}
-                className="bg-blue-600 text-white dark:bg-blue-800 dark:text-gray-200 px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-900 focus:outline-none"
+                type="button"
+                onClick={() => setShowAdvancedOptions((prev) => !prev)}
+                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               >
-                <ArrowPathIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={handleProcessDocuments}
-                disabled={processing || selectedDocuments.length === 0}
-                className="bg-blue-600 text-white dark:bg-blue-800 dark:text-gray-200 px-4 py-2 rounded hover:bg-blue-700 dark:hover:bg-blue-900 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {processing ? "Processing..." : `Generate Suggestions (${selectedDocuments.length})`}
+                {showAdvancedOptions ? "Hide advanced options" : "Show advanced options"}
               </button>
             </div>
-          </div>
-          <div className="flex space-x-2 mb-4">
-            <button onClick={handleSelectAll} className="text-sm bg-gray-200 dark:bg-gray-600 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-500">Select All</button>
-            <button onClick={handleSelectNone} className="text-sm bg-gray-200 dark:bg-gray-600 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-500">Select None</button>
-          </div>
 
-          <div className="flex space-x-4 mb-6">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={generateTitles}
-                onChange={(e) => setGenerateTitles(e.target.checked)}
-                className="dark:bg-gray-700 dark:border-gray-600"
-              />
-              <span className="text-gray-700 dark:text-gray-200">Generate Titles</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={generateTags}
-                onChange={(e) => setGenerateTags(e.target.checked)}
-                className="dark:bg-gray-700 dark:border-gray-600"
-              />
-              <span className="text-gray-700 dark:text-gray-200">Generate Tags</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={generateCorrespondents}
-                onChange={(e) => setGenerateCorrespondents(e.target.checked)}
-                className="dark:bg-gray-700 dark:border-gray-600"
-              />
-              <span className="text-gray-700 dark:text-gray-200">Generate Correspondents</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={generateDocumentTypes}
-                onChange={(e) => setGenerateDocumentTypes(e.target.checked)}
-                className="dark:bg-gray-700 dark:border-gray-600"
-              />
-              <span className="text-gray-700 dark:text-gray-200">Generate Document Types</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={generateCreatedDate}
-                onChange={(e) => setGenerateCreatedDate(e.target.checked)}
-                className="dark:bg-gray-700 dark:border-gray-600"
-              />
-              <span className="text-gray-700 dark:text-gray-200">Generate Created Date</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={generateCustomFields}
-                onChange={(e) => setGenerateCustomFields(e.target.checked)}
-                className="dark:bg-gray-700 dark:border-gray-600"
-              />
-              <span className="text-gray-700 dark:text-gray-200">Generate Custom Fields</span>
-            </label>
+            {showAdvancedOptions && (
+              <div className="mt-4 rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/80">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  Generate the following metadata
+                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {generationOptions.map((option) => (
+                    <label
+                      key={option.label}
+                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                        option.checked
+                          ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/30"
+                          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={option.checked}
+                        onChange={(e) => option.onChange(e.target.checked)}
+                        className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {option.label}
+                        </span>
+                        <span className="mt-1 block text-sm text-gray-600 dark:text-gray-300">
+                          {option.description}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </DocumentsToProcess>
       ) : (

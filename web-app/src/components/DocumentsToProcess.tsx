@@ -22,22 +22,29 @@ const DocumentsToProcess: React.FC<DocumentsToProcessProps> = ({
   children,
   paperlessUrl,
   onDeleteDocument,
-}) => (
-  <section>
-    {children}
-    <div className={`grid grid-cols-${gridCols} gap-4`}>
-      {documents.map((doc) => (
-        <DocumentCard
-          key={doc.id}
-          document={doc}
-          isSelected={selectedDocuments?.includes(doc.id)}
-          onSelect={() => onSelectDocument && onSelectDocument(doc.id)}
-          paperlessUrl={paperlessUrl}
-          onDelete={onDeleteDocument}
-        />
-      ))}
-    </div>
-  </section>
-);
+}) => {
+  const gridClassName =
+    gridCols === "3"
+      ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+      : "grid grid-cols-1 gap-4 md:grid-cols-2";
+
+  return (
+    <section>
+      {children}
+      <div className={gridClassName}>
+        {documents.map((doc) => (
+          <DocumentCard
+            key={doc.id}
+            document={doc}
+            isSelected={selectedDocuments?.includes(doc.id)}
+            onSelect={() => onSelectDocument && onSelectDocument(doc.id)}
+            paperlessUrl={paperlessUrl}
+            onDelete={onDeleteDocument}
+          />
+        ))}
+      </div>
+    </section>
+  );
+};
 
 export default DocumentsToProcess;
