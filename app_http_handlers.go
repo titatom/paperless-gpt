@@ -285,10 +285,31 @@ func (app *App) getIntegrationStatusHandler(c *gin.Context) {
 
 func (app *App) startIntegrationConnectHandler(c *gin.Context) {
 	provider := c.Param("provider")
-	redirectURL := currentBaseURL(c) + "/api/integrations/" + provider + "/oauth/callback"
-	authURL, err := app.Integrations.BeginOAuth(c.Request.Context(), provider, redirectURL)
+
+	impl := getIntegrationProvider(provider)
+	if impl == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown integration provider"})
+		return
+	}
+	configured, reason := impl.Configured()
+	if !configured {
+		c.JSON(http.StatusBadRequest, gin.H{"error": reason})
+		return
+	}
+
+	state, err := generateOAuthStateToken()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate state token"})
+		return
+	}
+	if err := saveOAuthState(app.Database.WithContext(c.Request.Context()), provider, state, "/settings"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save oauth state"})
+		return
+	}
+
+	authURL, err := impl.AuthorizationURL(c, state)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -297,11 +318,47 @@ func (app *App) startIntegrationConnectHandler(c *gin.Context) {
 
 func (app *App) integrationOAuthCallbackHandler(c *gin.Context) {
 	provider := c.Param("provider")
-	redirectURL := currentBaseURL(c) + "/api/integrations/" + provider + "/oauth/callback"
-	if err := app.Integrations.HandleOAuthCallback(c.Request.Context(), provider, c.Query("code"), c.Query("state"), redirectURL); err != nil {
+	code := c.Query("code")
+	state := c.Query("state")
+
+	stateRecord, err := consumeOAuthState(app.Database.WithContext(c.Request.Context()), provider, state)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Integration connection failed: invalid or expired state")
+		return
+	}
+
+	impl := getIntegrationProvider(provider)
+	if impl == nil {
+		c.String(http.StatusBadRequest, "Integration connection failed: unknown provider")
+		return
+	}
+
+	token, err := impl.ExchangeCode(c.Request.Context(), c, code)
+	if err != nil {
 		c.String(http.StatusBadRequest, "Integration connection failed: %v", err)
 		return
 	}
+
+	identity, err := impl.FetchIdentity(c.Request.Context(), &IntegrationConnection{
+		Provider:             provider,
+		AccessToken:          token.AccessToken,
+		RefreshToken:         token.RefreshToken,
+		AccessTokenExpiresAt: token.ExpiresAt,
+	})
+	if err != nil {
+		log.WithError(err).Warnf("failed to fetch identity for provider %s after OAuth", provider)
+	}
+
+	if _, err := upsertIntegrationConnection(app.Database.WithContext(c.Request.Context()), provider, token, identity); err != nil {
+		c.String(http.StatusInternalServerError, "Integration connection failed: could not persist connection")
+		return
+	}
+
+	returnPath := "/settings"
+	if stateRecord != nil && stateRecord.ReturnPath != "" {
+		returnPath = stateRecord.ReturnPath
+	}
+	_ = returnPath
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, `<html><body><script>window.close && window.close(); if (window.opener) { window.opener.location.reload(); }</script><p>Integration connected. You can close this window.</p></body></html>`)
