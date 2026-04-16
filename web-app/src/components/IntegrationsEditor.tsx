@@ -236,6 +236,44 @@ const IntegrationsEditor: React.FC = () => {
   const handleConnect = useCallback(async (provider: string) => {
     setConnectingProvider(provider);
     setError(null);
+
+    // Open the popup immediately within the user-gesture context so browsers
+    // do not treat it as a pop-up blocker candidate.  We navigate it to the
+    // real auth URL once we receive it from the server.
+    const popup = window.open('about:blank', '_blank', 'width=640,height=800');
+    if (!popup) {
+      setError('Popup blocked. Please allow popups and try again.');
+      setConnectingProvider(null);
+      return;
+    }
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    const cleanup = () => {
+      if (pollInterval !== null) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      window.removeEventListener('message', onMessage);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      // Only handle messages that look like our OAuth result.
+      if (!event.data || typeof event.data !== 'object') return;
+      const { type, error } = event.data as { type?: string; error?: string };
+      if (type === 'oauth_success') {
+        cleanup();
+        setSuccessMessage(`${prettyProviderName(provider)} connected successfully.`);
+        refreshData();
+      } else if (type === 'oauth_error') {
+        cleanup();
+        setError(`${prettyProviderName(provider)} connection failed: ${error || 'unknown error'}`);
+        refreshData();
+      }
+    };
+
+    window.addEventListener('message', onMessage);
+
     try {
       const response = await fetch(`./api/integrations/${provider}/connect/start`, {
         method: 'POST',
@@ -244,20 +282,42 @@ const IntegrationsEditor: React.FC = () => {
       });
       const payload = await response.json();
       if (!response.ok) {
+        popup.close();
+        cleanup();
         throw new Error(payload.error || 'Failed to start connection');
       }
 
-      const popup = window.open(payload.redirect_url || payload.url, '_blank', 'width=640,height=800');
-      if (!popup) {
-        throw new Error('Popup blocked. Please allow popups and try again.');
+      const authURL = payload.redirect_url || payload.url;
+      if (!authURL) {
+        popup.close();
+        cleanup();
+        throw new Error('No redirect URL returned from server');
       }
+
+      // Navigate the already-open popup to the OAuth authorization page.
+      popup.location.href = authURL;
+
+      // Also poll for popup close as a fallback (postMessage may be blocked by
+      // the browser if the callback page's origin differs).
+      pollInterval = setInterval(() => {
+        try {
+          if (popup.closed) {
+            cleanup();
+            refreshData();
+          }
+        } catch {
+          // Ignore cross-origin access errors during polling.
+          cleanup();
+          refreshData();
+        }
+      }, 500);
     } catch (err) {
       console.error(`Error connecting ${provider}:`, err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setConnectingProvider(null);
     }
-  }, []);
+  }, [refreshData]);
 
   const handleDisconnect = useCallback(async (provider: string) => {
     setDisconnectingProvider(provider);

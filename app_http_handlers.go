@@ -316,26 +316,77 @@ func (app *App) startIntegrationConnectHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"redirect_url": authURL})
 }
 
+const oauthPopupHTMLTemplate = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>%s</title></head>
+<body>
+<script>
+(function() {
+  var msg = %s;
+  if (window.opener) {
+    try { window.opener.postMessage(msg, '*'); } catch(e) {}
+  }
+  setTimeout(function() { window.close(); }, 2000);
+})();
+</script>
+<p>%s</p>
+</body>
+</html>`
+
+func oauthPopupResponse(c *gin.Context, status int, title, message string, msgPayload interface{}) {
+	jsonBytes, _ := json.Marshal(msgPayload)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(status, oauthPopupHTMLTemplate, title, string(jsonBytes), message)
+}
+
 func (app *App) integrationOAuthCallbackHandler(c *gin.Context) {
 	provider := c.Param("provider")
 	code := c.Query("code")
 	state := c.Query("state")
 
+	// Handle provider-level OAuth errors (e.g. user denied access)
+	if oauthErr := c.Query("error"); oauthErr != "" {
+		errDesc := c.Query("error_description")
+		if errDesc == "" {
+			errDesc = oauthErr
+		}
+		log.Warnf("OAuth error from provider %s: %s - %s", provider, oauthErr, errDesc)
+		oauthPopupResponse(c, http.StatusBadRequest,
+			"Connection failed",
+			"Integration connection failed: "+errDesc,
+			gin.H{"type": "oauth_error", "error": errDesc},
+		)
+		return
+	}
+
 	stateRecord, err := consumeOAuthState(app.Database.WithContext(c.Request.Context()), provider, state)
 	if err != nil {
-		c.String(http.StatusBadRequest, "Integration connection failed: invalid or expired state")
+		oauthPopupResponse(c, http.StatusBadRequest,
+			"Connection failed",
+			"Integration connection failed: invalid or expired state. Please try connecting again.",
+			gin.H{"type": "oauth_error", "error": "invalid or expired state"},
+		)
 		return
 	}
 
 	impl := getIntegrationProvider(provider)
 	if impl == nil {
-		c.String(http.StatusBadRequest, "Integration connection failed: unknown provider")
+		oauthPopupResponse(c, http.StatusBadRequest,
+			"Connection failed",
+			"Integration connection failed: unknown provider.",
+			gin.H{"type": "oauth_error", "error": "unknown provider"},
+		)
 		return
 	}
 
 	token, err := impl.ExchangeCode(c.Request.Context(), c, code)
 	if err != nil {
-		c.String(http.StatusBadRequest, "Integration connection failed: %v", err)
+		log.WithError(err).Errorf("OAuth code exchange failed for provider %s", provider)
+		oauthPopupResponse(c, http.StatusBadRequest,
+			"Connection failed",
+			"Integration connection failed: could not exchange authorization code. Please verify your redirect URL and app credentials.",
+			gin.H{"type": "oauth_error", "error": "code exchange failed"},
+		)
 		return
 	}
 
@@ -350,18 +401,21 @@ func (app *App) integrationOAuthCallbackHandler(c *gin.Context) {
 	}
 
 	if _, err := upsertIntegrationConnection(app.Database.WithContext(c.Request.Context()), provider, token, identity); err != nil {
-		c.String(http.StatusInternalServerError, "Integration connection failed: could not persist connection")
+		oauthPopupResponse(c, http.StatusInternalServerError,
+			"Connection failed",
+			"Integration connection failed: could not save connection.",
+			gin.H{"type": "oauth_error", "error": "could not persist connection"},
+		)
 		return
 	}
 
-	returnPath := "/settings"
-	if stateRecord != nil && stateRecord.ReturnPath != "" {
-		returnPath = stateRecord.ReturnPath
-	}
-	_ = returnPath
+	_ = stateRecord
 
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(http.StatusOK, `<html><body><script>window.close && window.close(); if (window.opener) { window.opener.location.reload(); }</script><p>Integration connected. You can close this window.</p></body></html>`)
+	oauthPopupResponse(c, http.StatusOK,
+		"Connected",
+		"Integration connected successfully. You can close this window.",
+		gin.H{"type": "oauth_success"},
+	)
 }
 
 func (app *App) disconnectIntegrationHandler(c *gin.Context) {
