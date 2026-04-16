@@ -317,6 +317,45 @@ func (app *App) disconnectIntegrationHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Disconnected"})
 }
 
+func (app *App) jobberReceiptHandler(c *gin.Context) {
+	token := c.Param("token")
+	if strings.TrimSpace(token) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing receipt token"})
+		return
+	}
+
+	share, err := app.Integrations.ConsumeReceiptAccessToken(c.Request.Context(), token)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Receipt token not found or expired"})
+		return
+	}
+
+	document, err := app.Client.GetDocument(c.Request.Context(), share.DocumentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load document: %v", err)})
+		return
+	}
+
+	content, err := app.Client.DownloadPDF(c.Request.Context(), document)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to download document: %v", err)})
+		return
+	}
+
+	filename := strings.TrimSpace(document.ArchivedFileName)
+	if filename == "" {
+		filename = strings.TrimSpace(document.OriginalFileName)
+	}
+	if filename == "" {
+		filename = fmt.Sprintf("document-%d.pdf", share.DocumentID)
+	}
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	c.Writer.WriteHeader(http.StatusOK)
+	_, _ = c.Writer.Write(content)
+}
+
 func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 	var req struct {
 		DocumentIDs []int `json:"document_ids"`

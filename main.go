@@ -397,6 +397,7 @@ func main() {
 		api.POST("/integrations/:provider/connect/start", app.startIntegrationConnectHandler)
 		api.GET("/integrations/:provider/oauth/callback", app.integrationOAuthCallbackHandler)
 		api.POST("/integrations/:provider/disconnect", app.disconnectIntegrationHandler)
+		api.GET("/integrations/jobber/receipt/:token", app.jobberReceiptHandler)
 		api.POST("/integrations/jobber/match-candidates", app.jobberMatchCandidatesHandler)
 
 		// OCR endpoints

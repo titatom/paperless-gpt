@@ -84,7 +84,7 @@ func InitializeTestDB() (*gorm.DB, error) {
 	}
 
 	// Migrate schema
-	err = db.AutoMigrate(&ModificationHistory{})
+	err = db.AutoMigrate(&ModificationHistory{}, &OAuthStateRecord{}, &IntegrationActionLog{}, &ReceiptAccessToken{})
 	if err != nil {
 		return nil, err
 	}

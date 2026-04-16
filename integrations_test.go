@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestJobberMatchCandidateDisplayLabel(t *testing.T) {
 	candidate := JobberMatchCandidate{
@@ -46,5 +49,37 @@ func TestRankJobberCandidatesPrefersJobNumberClientAndTitleMatches(t *testing.T)
 
 	if ranked[0].ID != "job-2" {
 		t.Fatalf("expected best ranked candidate to be job-2, got %s", ranked[0].ID)
+	}
+}
+
+func TestIssueAndConsumeReceiptAccessToken(t *testing.T) {
+	db, err := InitializeTestDB()
+	if err != nil {
+		t.Fatalf("InitializeTestDB() error = %v", err)
+	}
+
+	service := NewIntegrationsService(db)
+	token, err := service.IssueReceiptAccessToken(t.Context(), 42, time.Minute)
+	if err != nil {
+		t.Fatalf("IssueReceiptAccessToken() error = %v", err)
+	}
+	if token.Token == "" {
+		t.Fatal("expected non-empty token")
+	}
+
+	record, err := service.ConsumeReceiptAccessToken(t.Context(), token.Token)
+	if err != nil {
+		t.Fatalf("ConsumeReceiptAccessToken() error = %v", err)
+	}
+	if record.DocumentID != 42 {
+		t.Fatalf("expected document ID 42, got %d", record.DocumentID)
+	}
+
+	record2, err := service.ConsumeReceiptAccessToken(t.Context(), token.Token)
+	if err != nil {
+		t.Fatalf("second ConsumeReceiptAccessToken() error = %v", err)
+	}
+	if record2.DocumentID != 42 {
+		t.Fatalf("expected second lookup document ID 42, got %d", record2.DocumentID)
 	}
 }

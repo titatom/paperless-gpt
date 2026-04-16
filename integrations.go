@@ -349,6 +349,12 @@ type JobberExpenseCreateResult struct {
 	WebURL    string
 }
 
+type ReceiptAccessToken struct {
+	Token      string
+	DocumentID int
+	ExpiresAt  time.Time
+}
+
 func NewIntegrationsService(db *gorm.DB) *IntegrationsService {
 	return &IntegrationsService{DB: db}
 }
@@ -396,6 +402,34 @@ func (s *IntegrationsService) HandleOAuthCallback(ctx context.Context, provider,
 
 func (s *IntegrationsService) Disconnect(ctx context.Context, provider string) error {
 	return disconnectIntegrationConnection(s.DB.WithContext(ctx), provider)
+}
+
+func (s *IntegrationsService) IssueReceiptAccessToken(ctx context.Context, documentID int, ttl time.Duration) (*ReceiptAccessToken, error) {
+	token, err := generateOAuthStateToken()
+	if err != nil {
+		return nil, err
+	}
+	receiptToken := &ReceiptAccessToken{
+		Token:      token,
+		DocumentID: documentID,
+		ExpiresAt:  time.Now().Add(ttl),
+	}
+	if err := s.DB.WithContext(ctx).Create(receiptToken).Error; err != nil {
+		return nil, err
+	}
+	return receiptToken, nil
+}
+
+func (s *IntegrationsService) ConsumeReceiptAccessToken(ctx context.Context, token string) (*ReceiptAccessToken, error) {
+	var record ReceiptAccessToken
+	if err := s.DB.WithContext(ctx).Where("token = ?", token).First(&record).Error; err != nil {
+		return nil, err
+	}
+	if record.ExpiresAt.Before(time.Now()) {
+		_ = s.DB.WithContext(ctx).Delete(&record).Error
+		return nil, fmt.Errorf("receipt token expired")
+	}
+	return &record, nil
 }
 
 func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document Document) ([]JobberMatchCandidate, error) {
@@ -595,18 +629,15 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 
 	totalValue, hasTotal := deriveJobberExpenseTotal(suggestion)
 
-	document, err := client.GetDocument(ctx, suggestion.ID)
+	receiptToken, err := s.IssueReceiptAccessToken(ctx, suggestion.ID, 30*time.Minute)
 	if err != nil {
 		return nil, err
 	}
-	receiptURL := strings.TrimSpace(document.ArchivedFileName)
-	if receiptURL == "" {
-		receiptURL = strings.TrimSpace(document.OriginalFileName)
+	baseURL := strings.TrimSpace(os.Getenv("PAPERLESS_GPT_PUBLIC_URL"))
+	if baseURL == "" {
+		return nil, fmt.Errorf("PAPERLESS_GPT_PUBLIC_URL is required for Jobber receipt attachment")
 	}
-	// Jobber expects an accessible URL; for phase 2, reuse the Paperless public document URL if available.
-	if paperlessPublicURL := strings.TrimSpace(os.Getenv("PAPERLESS_PUBLIC_URL")); paperlessPublicURL != "" {
-		receiptURL = strings.TrimRight(paperlessPublicURL, "/") + fmt.Sprintf("/documents/%d/download/", suggestion.ID)
-	}
+	receiptURL := strings.TrimRight(baseURL, "/") + "/api/integrations/jobber/receipt/" + url.PathEscape(receiptToken.Token)
 
 	input := map[string]interface{}{
 		"title":       title,
