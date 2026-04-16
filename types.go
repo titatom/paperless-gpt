@@ -156,7 +156,7 @@ type JobberMatchCandidate struct {
 func (c JobberMatchCandidate) DisplayLabel() string {
 	parts := []string{}
 	if c.JobNumber != "" {
-		parts = append(parts, c.JobNumber)
+		parts = append(parts, "#"+c.JobNumber)
 	}
 	if c.ClientName != "" {
 		parts = append(parts, c.ClientName)

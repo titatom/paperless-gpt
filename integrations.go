@@ -426,7 +426,7 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 			Jobs struct {
 				Nodes []struct {
 					ID        string `json:"id"`
-					JobNumber string `json:"jobNumber"`
+					JobNumber int    `json:"jobNumber"`
 					Title     string `json:"title"`
 					Client    struct {
 						Name        string `json:"name"`
@@ -453,11 +453,15 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 		if clientName == "" {
 			clientName = strings.TrimSpace(node.Client.Name)
 		}
+		jobName := strings.TrimSpace(node.Title)
+		if jobName == "" {
+			jobName = "Untitled job"
+		}
 		candidates = append(candidates, JobberMatchCandidate{
 			ID:         node.ID,
-			JobNumber:  node.JobNumber,
+			JobNumber:  fmt.Sprintf("#%d", node.JobNumber),
 			ClientName: clientName,
-			JobName:    node.Title,
+			JobName:    jobName,
 		})
 	}
 
