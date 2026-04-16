@@ -6,6 +6,11 @@ interface CustomField {
   data_type: string;
 }
 
+interface FieldOption {
+  value: string;
+  label: string;
+}
+
 interface SettingsData {
   jobber_enabled: boolean;
   jobber_job_id_field_id: number;
@@ -13,9 +18,10 @@ interface SettingsData {
   jobber_client_field_id: number;
   jobber_job_name_field_id: number;
   jobber_expense_enabled: boolean;
-  jobber_expense_title_field_id: number;
-  jobber_expense_description_field_id: number;
-  jobber_expense_total_field_id: number;
+  jobber_expense_title_field_ref: string;
+  jobber_expense_description_field_ref: string;
+  jobber_expense_date_field_ref: string;
+  jobber_expense_total_field_ref: string;
   google_drive_enabled: boolean;
   google_drive_folder_id: string;
   quickbooks_enabled: boolean;
@@ -37,13 +43,48 @@ const defaultSettings: SettingsData = {
   jobber_client_field_id: 0,
   jobber_job_name_field_id: 0,
   jobber_expense_enabled: false,
-  jobber_expense_title_field_id: 0,
-  jobber_expense_description_field_id: 0,
-  jobber_expense_total_field_id: 0,
+  jobber_expense_title_field_ref: '',
+  jobber_expense_description_field_ref: '',
+  jobber_expense_date_field_ref: '',
+  jobber_expense_total_field_ref: '',
   google_drive_enabled: false,
   google_drive_folder_id: '',
   quickbooks_enabled: false,
 };
+
+const CUSTOM_FIELD_REF_PREFIX = 'custom_field:';
+
+const builtInPaperlessFieldOptions: FieldOption[] = [
+  { value: 'document.title', label: 'Document title' },
+  { value: 'document.content', label: 'Document content' },
+  { value: 'document.correspondent', label: 'Correspondent' },
+  { value: 'document.created_date', label: 'Created date' },
+  { value: 'document.document_type', label: 'Document type' },
+  { value: 'document.original_file_name', label: 'Original filename' },
+  { value: 'document.archived_file_name', label: 'Archived filename' },
+];
+
+function normalizeFieldRef(fieldRef: unknown, legacyFieldId: unknown): string {
+  if (typeof fieldRef === 'string') {
+    return fieldRef;
+  }
+
+  const parsedFieldId = Number(legacyFieldId || 0);
+  if (parsedFieldId > 0) {
+    return `${CUSTOM_FIELD_REF_PREFIX}${parsedFieldId}`;
+  }
+
+  return '';
+}
+
+function extractCustomFieldId(fieldRef: string): number {
+  if (!fieldRef.startsWith(CUSTOM_FIELD_REF_PREFIX)) {
+    return 0;
+  }
+
+  const parsed = Number(fieldRef.slice(CUSTOM_FIELD_REF_PREFIX.length));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 
 const IntegrationsEditor: React.FC = () => {
   const [settings, setSettings] = useState<SettingsData>(defaultSettings);
@@ -84,9 +125,22 @@ const IntegrationsEditor: React.FC = () => {
         jobber_client_field_id: Number(settingsData.settings?.jobber_client_field_id || 0),
         jobber_job_name_field_id: Number(settingsData.settings?.jobber_job_name_field_id || 0),
         jobber_expense_enabled: !!settingsData.settings?.jobber_expense_enabled,
-        jobber_expense_title_field_id: Number(settingsData.settings?.jobber_expense_title_field_id || 0),
-        jobber_expense_description_field_id: Number(settingsData.settings?.jobber_expense_description_field_id || 0),
-        jobber_expense_total_field_id: Number(settingsData.settings?.jobber_expense_total_field_id || 0),
+        jobber_expense_title_field_ref: normalizeFieldRef(
+          settingsData.settings?.jobber_expense_title_field_ref,
+          settingsData.settings?.jobber_expense_title_field_id,
+        ),
+        jobber_expense_description_field_ref: normalizeFieldRef(
+          settingsData.settings?.jobber_expense_description_field_ref,
+          settingsData.settings?.jobber_expense_description_field_id,
+        ),
+        jobber_expense_date_field_ref: normalizeFieldRef(
+          settingsData.settings?.jobber_expense_date_field_ref,
+          settingsData.settings?.jobber_expense_date_field_id,
+        ),
+        jobber_expense_total_field_ref: normalizeFieldRef(
+          settingsData.settings?.jobber_expense_total_field_ref,
+          settingsData.settings?.jobber_expense_total_field_id,
+        ),
         google_drive_enabled: !!settingsData.settings?.google_drive_enabled,
         google_drive_folder_id: settingsData.settings?.google_drive_folder_id || '',
         quickbooks_enabled: !!settingsData.settings?.quickbooks_enabled,
@@ -152,10 +206,17 @@ const IntegrationsEditor: React.FC = () => {
     setIsSaving(true);
     setError(null);
     try {
+      const payload = {
+        ...settings,
+        jobber_expense_title_field_id: extractCustomFieldId(settings.jobber_expense_title_field_ref),
+        jobber_expense_description_field_id: extractCustomFieldId(settings.jobber_expense_description_field_ref),
+        jobber_expense_date_field_id: extractCustomFieldId(settings.jobber_expense_date_field_ref),
+        jobber_expense_total_field_id: extractCustomFieldId(settings.jobber_expense_total_field_ref),
+      };
       const response = await fetch('./api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errData = await response.json();
@@ -222,6 +283,18 @@ const IntegrationsEditor: React.FC = () => {
 
   const customFieldOptions = useMemo(
     () => [{ id: 0, name: 'Not mapped' }, ...customFields.map((field) => ({ id: field.id, name: field.name }))],
+    [customFields],
+  );
+
+  const expenseFieldOptions = useMemo(
+    () => [
+      { value: '', label: 'Use default behavior' },
+      ...builtInPaperlessFieldOptions,
+      ...customFields.map((field) => ({
+        value: `${CUSTOM_FIELD_REF_PREFIX}${field.id}`,
+        label: `Custom field: ${field.name}`,
+      })),
+    ],
     [customFields],
   );
 
@@ -310,27 +383,33 @@ const IntegrationsEditor: React.FC = () => {
               disabled={!settings.jobber_enabled || !settings.jobber_expense_enabled}
               className="grid grid-cols-1 md:grid-cols-2 gap-4 disabled:opacity-50"
             >
-              <FieldMappingSelect
+              <FieldReferenceSelect
                 label="Expense title field"
-                value={settings.jobber_expense_title_field_id}
-                options={customFieldOptions}
-                onChange={(value) => handleSettingChange('jobber_expense_title_field_id', value)}
+                value={settings.jobber_expense_title_field_ref}
+                options={expenseFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_title_field_ref', value)}
               />
-              <FieldMappingSelect
+              <FieldReferenceSelect
                 label="Expense description field"
-                value={settings.jobber_expense_description_field_id}
-                options={customFieldOptions}
-                onChange={(value) => handleSettingChange('jobber_expense_description_field_id', value)}
+                value={settings.jobber_expense_description_field_ref}
+                options={expenseFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_description_field_ref', value)}
               />
-              <FieldMappingSelect
+              <FieldReferenceSelect
+                label="Expense date field"
+                value={settings.jobber_expense_date_field_ref}
+                options={expenseFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_date_field_ref', value)}
+              />
+              <FieldReferenceSelect
                 label="Expense total field"
-                value={settings.jobber_expense_total_field_id}
-                options={customFieldOptions}
-                onChange={(value) => handleSettingChange('jobber_expense_total_field_id', value)}
+                value={settings.jobber_expense_total_field_ref}
+                options={expenseFieldOptions}
+                onChange={(value) => handleSettingChange('jobber_expense_total_field_ref', value)}
               />
             </fieldset>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              On approval, a matched receipt can create a Jobber expense linked to the selected job using the mapped Paperless custom fields when available.
+              On approval, a matched receipt can create a Jobber expense linked to the selected job using mapped built-in Paperless fields or custom fields when available.
             </p>
           </div>
         </IntegrationCard>
@@ -493,6 +572,30 @@ const FieldMappingSelect: React.FC<FieldMappingSelectProps> = ({ label, value, o
       {options.map((option) => (
         <option key={option.id} value={option.id}>
           {option.name}
+        </option>
+      ))}
+    </select>
+  </div>
+);
+
+interface FieldReferenceSelectProps {
+  label: string;
+  value: string;
+  options: FieldOption[];
+  onChange: (value: string) => void;
+}
+
+const FieldReferenceSelect: React.FC<FieldReferenceSelectProps> = ({ label, value, options, onChange }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
         </option>
       ))}
     </select>

@@ -113,17 +113,21 @@ type Settings struct {
 	CustomFieldsSelectedIDs          []int  `json:"custom_fields_selected_ids"`
 	CustomFieldsWriteMode            string `json:"custom_fields_write_mode"` // "append", "update", or "replace"
 	RestrictTagsToExisting           bool   `json:"restrict_tags_to_existing"`
-	RestrictCorrespondentsToExisting bool `json:"restrict_correspondents_to_existing"`
-	RestrictDocumentTypesToExisting  bool `json:"restrict_document_types_to_existing"`
+	RestrictCorrespondentsToExisting bool   `json:"restrict_correspondents_to_existing"`
+	RestrictDocumentTypesToExisting  bool   `json:"restrict_document_types_to_existing"`
 	JobberEnabled                    bool   `json:"jobber_enabled"`
 	JobberJobIDFieldID               int    `json:"jobber_job_id_field_id"`
 	JobberJobNumberFieldID           int    `json:"jobber_job_number_field_id"`
 	JobberClientFieldID              int    `json:"jobber_client_field_id"`
 	JobberJobNameFieldID             int    `json:"jobber_job_name_field_id"`
 	JobberExpenseEnabled             bool   `json:"jobber_expense_enabled"`
+	JobberExpenseTitleFieldRef       string `json:"jobber_expense_title_field_ref"`
 	JobberExpenseTitleFieldID        int    `json:"jobber_expense_title_field_id"`
+	JobberExpenseDescriptionFieldRef string `json:"jobber_expense_description_field_ref"`
 	JobberExpenseDescriptionFieldID  int    `json:"jobber_expense_description_field_id"`
+	JobberExpenseDateFieldRef        string `json:"jobber_expense_date_field_ref"`
 	JobberExpenseDateFieldID         int    `json:"jobber_expense_date_field_id"`
+	JobberExpenseTotalFieldRef       string `json:"jobber_expense_total_field_ref"`
 	JobberExpenseTotalFieldID        int    `json:"jobber_expense_total_field_id"`
 	GoogleDriveEnabled               bool   `json:"google_drive_enabled"`
 	GoogleDriveFolderID              string `json:"google_drive_folder_id"`
@@ -183,17 +187,17 @@ type IntegrationConnectionStatus struct {
 }
 
 type DocumentIntegrationResult struct {
-	DocumentID            int    `json:"document_id"`
-	PaperlessUpdated      bool   `json:"paperless_updated"`
-	JobberApplied         bool   `json:"jobber_applied,omitempty"`
-	JobberError           string `json:"jobber_error,omitempty"`
-	JobberExpenseCreated  bool   `json:"jobber_expense_created,omitempty"`
-	JobberExpenseID       string `json:"jobber_expense_id,omitempty"`
-	JobberExpenseError    string `json:"jobber_expense_error,omitempty"`
-	GoogleDriveUploaded   bool   `json:"google_drive_uploaded,omitempty"`
-	GoogleDriveFileID     string `json:"google_drive_file_id,omitempty"`
-	GoogleDriveURL        string `json:"google_drive_url,omitempty"`
-	GoogleDriveError      string `json:"google_drive_error,omitempty"`
+	DocumentID           int    `json:"document_id"`
+	PaperlessUpdated     bool   `json:"paperless_updated"`
+	JobberApplied        bool   `json:"jobber_applied,omitempty"`
+	JobberError          string `json:"jobber_error,omitempty"`
+	JobberExpenseCreated bool   `json:"jobber_expense_created,omitempty"`
+	JobberExpenseID      string `json:"jobber_expense_id,omitempty"`
+	JobberExpenseError   string `json:"jobber_expense_error,omitempty"`
+	GoogleDriveUploaded  bool   `json:"google_drive_uploaded,omitempty"`
+	GoogleDriveFileID    string `json:"google_drive_file_id,omitempty"`
+	GoogleDriveURL       string `json:"google_drive_url,omitempty"`
+	GoogleDriveError     string `json:"google_drive_error,omitempty"`
 }
 
 type Correspondent struct {

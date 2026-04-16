@@ -83,3 +83,84 @@ func TestIssueAndConsumeReceiptAccessToken(t *testing.T) {
 		t.Fatalf("expected second lookup document ID 42, got %d", record2.DocumentID)
 	}
 }
+
+func TestResolveJobberExpenseFieldValuePrefersSuggestedBuiltInFields(t *testing.T) {
+	suggestion := DocumentSuggestion{
+		SuggestedTitle:         "Approved receipt title",
+		SuggestedCorrespondent: "Approved vendor",
+		SuggestedDocumentType:  "Receipt",
+		OriginalDocument: Document{
+			Title:            "Original title",
+			Correspondent:    "Original vendor",
+			DocumentTypeName: "Invoice",
+		},
+	}
+
+	title, ok := resolveJobberExpenseFieldValue(suggestion, paperlessFieldRefDocumentTitle)
+	if !ok || title != "Approved receipt title" {
+		t.Fatalf("expected suggested title, got %#v (ok=%v)", title, ok)
+	}
+
+	correspondent, ok := resolveJobberExpenseFieldValue(suggestion, paperlessFieldRefDocumentCorrespondent)
+	if !ok || correspondent != "Approved vendor" {
+		t.Fatalf("expected suggested correspondent, got %#v (ok=%v)", correspondent, ok)
+	}
+
+	documentType, ok := resolveJobberExpenseFieldValue(suggestion, paperlessFieldRefDocumentType)
+	if !ok || documentType != "Receipt" {
+		t.Fatalf("expected suggested document type, got %#v (ok=%v)", documentType, ok)
+	}
+}
+
+func TestResolveJobberExpenseFieldValueSupportsCustomFieldReferences(t *testing.T) {
+	suggestion := DocumentSuggestion{
+		SuggestedCustomFields: []CustomFieldSuggestion{
+			{ID: 17, Name: "Total", Value: "123.45"},
+		},
+		OriginalDocument: Document{
+			CustomFields: []CustomFieldResponse{
+				{Field: 19, Value: "fallback"},
+			},
+		},
+	}
+
+	value, ok := resolveJobberExpenseFieldValue(suggestion, customFieldReference(17))
+	if !ok || value != "123.45" {
+		t.Fatalf("expected suggested custom field value, got %#v (ok=%v)", value, ok)
+	}
+
+	value, ok = resolveJobberExpenseFieldValue(suggestion, customFieldReference(19))
+	if !ok || value != "fallback" {
+		t.Fatalf("expected original custom field fallback, got %#v (ok=%v)", value, ok)
+	}
+}
+
+func TestDeriveJobberExpenseDateUsesMappedField(t *testing.T) {
+	suggestion := DocumentSuggestion{
+		SuggestedCreatedDate: "2026-04-15",
+	}
+
+	got, err := deriveJobberExpenseDate(suggestion, paperlessFieldRefDocumentCreatedDate)
+	if err != nil {
+		t.Fatalf("deriveJobberExpenseDate() error = %v", err)
+	}
+	if got != "2026-04-15T00:00:00Z" {
+		t.Fatalf("deriveJobberExpenseDate() = %q, want %q", got, "2026-04-15T00:00:00Z")
+	}
+}
+
+func TestDeriveJobberExpenseTotalUsesMappedField(t *testing.T) {
+	suggestion := DocumentSuggestion{
+		SuggestedCustomFields: []CustomFieldSuggestion{
+			{ID: 21, Name: "Amount", Value: "$456.78"},
+		},
+	}
+
+	got, ok := deriveJobberExpenseTotal(suggestion, customFieldReference(21))
+	if !ok {
+		t.Fatal("expected mapped total to be detected")
+	}
+	if got != 456.78 {
+		t.Fatalf("deriveJobberExpenseTotal() = %v, want %v", got, 456.78)
+	}
+}
