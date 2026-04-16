@@ -13,6 +13,10 @@ export interface Document {
   content: string;
   tags: string[];
   correspondent: string;
+  created_date?: string;
+  original_file_name?: string;
+  archived_file_name?: string;
+  document_type_name?: string;
 }
 
 export interface GenerateSuggestionsRequest {
@@ -34,6 +38,33 @@ export interface CustomFieldSuggestion {
   isSelected: boolean;
 }
 
+export interface JobberMatchCandidate {
+  id: string;
+  job_number: string;
+  client_name: string;
+  job_name: string;
+}
+
+export interface DocumentIntegrationResult {
+  document_id: number;
+  paperless_updated: boolean;
+  jobber_applied: boolean;
+  jobber_error?: string;
+  google_drive_uploaded: boolean;
+  google_drive_error?: string;
+  google_drive_file_id?: string;
+  google_drive_url?: string;
+}
+
+export interface IntegrationStatus {
+  provider: string;
+  configured: boolean;
+  connected: boolean;
+  account_name?: string;
+  account_id?: string;
+  reason?: string;
+}
+
 export interface DocumentSuggestion {
   id: number;
   original_document: Document;
@@ -44,6 +75,9 @@ export interface DocumentSuggestion {
   suggested_document_type?: string;
   suggested_created_date?: string;
   suggested_custom_fields?: CustomFieldSuggestion[];
+  jobber_candidates?: JobberMatchCandidate[];
+  selected_jobber_match_id?: string;
+  upload_to_google_drive?: boolean;
 }
 
 export interface TagOption {
@@ -69,6 +103,8 @@ const DocumentProcessor: React.FC = () => {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [paperlessUrl, setPaperlessUrl] = useState<string>("");
+  const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, IntegrationStatus>>({});
+  const [integrationResults, setIntegrationResults] = useState<DocumentIntegrationResult[]>([]);
   const [generateTitles, setGenerateTitles] = useState(true);
   const [generateTags, setGenerateTags] = useState(true);
   const [generateCorrespondents, setGenerateCorrespondents] = useState(true);
@@ -89,17 +125,23 @@ const DocumentProcessor: React.FC = () => {
   // Custom hook to fetch initial data
   const fetchInitialData = useCallback(async () => {
     try {
-      const [filterTagRes, documentsRes, tagsRes, customFieldsRes, paperlessUrlRes] = await Promise.all([
+      const [filterTagRes, documentsRes, tagsRes, customFieldsRes, paperlessUrlRes, integrationsRes] = await Promise.all([
         axios.get<{ tag: string }>("./api/filter-tag"),
         axios.get<Document[]>("./api/documents"),
         axios.get<Record<string, number>>("./api/tags"),
         axios.get<CustomField[]>('./api/custom_fields'),
         axios.get<{ url: string }>("./api/paperless-url"),
+        axios.get<{ providers: IntegrationStatus[] }>("./api/integrations"),
       ]);
 
       setFilterTag(filterTagRes.data.tag);
       setAllCustomFields(customFieldsRes.data || []);
       setPaperlessUrl(paperlessUrlRes.data.url || "");
+      setIntegrationStatuses(
+        Object.fromEntries(
+          (integrationsRes.data.providers || []).map((provider) => [provider.provider, provider])
+        )
+      );
       setDocuments(documentsRes.data);
       setSelectedDocuments(documentsRes.data.map((d: Document) => d.id));
       const tags = Object.keys(tagsRes.data).map((tag) => ({
@@ -153,9 +195,32 @@ const DocumentProcessor: React.FC = () => {
           name: customFieldMap.get(cf.id) || 'Unknown Field',
           isSelected: true,
         })),
+        jobber_candidates: [],
+        selected_jobber_match_id: suggestion.selected_jobber_match_id || "",
+        upload_to_google_drive: !!suggestion.upload_to_google_drive,
       }));
 
       setSuggestions(processedSuggestions);
+      setIntegrationResults([]);
+
+      if (integrationStatuses.jobber?.connected) {
+        try {
+          const jobberResponse = await axios.post<{ candidates: Record<string, JobberMatchCandidate[]> }>(
+            "./api/integrations/jobber/match-candidates",
+            { document_ids: docsToProcess.map((d) => d.id) }
+          );
+
+          setSuggestions((current) =>
+            current.map((suggestion) => ({
+              ...suggestion,
+              jobber_candidates: jobberResponse.data.candidates?.[String(suggestion.id)] || [],
+            }))
+          );
+        } catch (jobberError) {
+          console.error("Error fetching Jobber candidates:", jobberError);
+          setError("Suggestions generated, but Jobber candidates could not be loaded.");
+        }
+      }
     } catch (err) {
       console.error("Error generating suggestions:", err);
       setError("Failed to generate suggestions.");
@@ -177,7 +242,8 @@ const DocumentProcessor: React.FC = () => {
         };
       });
 
-      await axios.patch("./api/update-documents", payload);
+      const response = await axios.patch<{ results: DocumentIntegrationResult[] }>("./api/update-documents", payload);
+      setIntegrationResults(response.data.results || []);
       setIsSuccessModalOpen(true);
       setSuggestions([]);
     } catch (err) {
@@ -212,6 +278,22 @@ const DocumentProcessor: React.FC = () => {
               ),
             }
           : doc
+      )
+    );
+  };
+
+  const handleJobberSelectionChange = (docId: number, selectedJobberMatchId: string) => {
+    setSuggestions((prevSuggestions) =>
+      prevSuggestions.map((doc) =>
+        doc.id === docId ? { ...doc, selected_jobber_match_id: selectedJobberMatchId } : doc
+      )
+    );
+  };
+
+  const handleGoogleDriveToggle = (docId: number) => {
+    setSuggestions((prevSuggestions) =>
+      prevSuggestions.map((doc) =>
+        doc.id === docId ? { ...doc, upload_to_google_drive: !doc.upload_to_google_drive } : doc
       )
     );
   };
@@ -443,11 +525,15 @@ const DocumentProcessor: React.FC = () => {
           onDocumentTypeChange={handleDocumentTypeChange}
           onCreatedDateChange={handleCreatedDateChange}
           onCustomFieldSuggestionToggle={handleCustomFieldSuggestionToggle}
+          onJobberMatchChange={handleJobberSelectionChange}
+          onGoogleDriveToggle={handleGoogleDriveToggle}
           onBack={resetSuggestions}
           onUpdate={handleUpdateDocuments}
           updating={updating}
           paperlessUrl={paperlessUrl}
           onDeleteDocument={handleDeleteDocument}
+          integrationStatuses={integrationStatuses}
+          integrationResults={integrationResults}
         />
       )}
 

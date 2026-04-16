@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -31,8 +32,8 @@ type GetDocumentApiResponseResult struct {
 	// Modified            time.Time     `json:"modified"`
 	// Added               time.Time     `json:"added"`
 	// ArchiveSerialNumber interface{}   `json:"archive_serial_number"`
-	// OriginalFileName    string        `json:"original_file_name"`
-	// ArchivedFileName    string        `json:"archived_file_name"`
+	OriginalFileName string `json:"original_file_name"`
+	ArchivedFileName string `json:"archived_file_name"`
 	// Owner               int           `json:"owner"`
 	// UserCanChange       bool          `json:"user_can_change"`
 	Notes []interface{} `json:"notes"`
@@ -69,6 +70,7 @@ type GetDocumentApiResponse struct {
 	Tags             []int                 `json:"tags"`
 	CreatedDate      string                `json:"created_date"`
 	OriginalFileName string                `json:"original_file_name"`
+	ArchivedFileName string                `json:"archived_file_name"`
 	Notes            []interface{}         `json:"notes"`
 	CustomFields     []CustomFieldResponse `json:"custom_fields"`
 }
@@ -83,6 +85,7 @@ type Document struct {
 	Correspondent    string                `json:"correspondent"`
 	CreatedDate      string                `json:"created_date"`
 	OriginalFileName string                `json:"original_file_name"`
+	ArchivedFileName string                `json:"archived_file_name"`
 	DocumentTypeName string                `json:"document_type_name"`
 	CustomFields     []CustomFieldResponse `json:"custom_fields"`
 }
@@ -106,12 +109,20 @@ type AnalyzeDocumentsRequest struct {
 
 // Settings defines the structure for server-side UI settings
 type Settings struct {
-	CustomFieldsEnable           bool   `json:"custom_fields_enable"`
-	CustomFieldsSelectedIDs      []int  `json:"custom_fields_selected_ids"`
-	CustomFieldsWriteMode        string `json:"custom_fields_write_mode"` // "append" or "replace"
-	RestrictTagsToExisting       bool   `json:"restrict_tags_to_existing"`
+	CustomFieldsEnable               bool   `json:"custom_fields_enable"`
+	CustomFieldsSelectedIDs          []int  `json:"custom_fields_selected_ids"`
+	CustomFieldsWriteMode            string `json:"custom_fields_write_mode"` // "append", "update", or "replace"
+	RestrictTagsToExisting           bool   `json:"restrict_tags_to_existing"`
 	RestrictCorrespondentsToExisting bool `json:"restrict_correspondents_to_existing"`
 	RestrictDocumentTypesToExisting  bool `json:"restrict_document_types_to_existing"`
+	JobberEnabled                    bool   `json:"jobber_enabled"`
+	JobberJobIDFieldID               int    `json:"jobber_job_id_field_id"`
+	JobberJobNumberFieldID           int    `json:"jobber_job_number_field_id"`
+	JobberClientFieldID              int    `json:"jobber_client_field_id"`
+	JobberJobNameFieldID             int    `json:"jobber_job_name_field_id"`
+	GoogleDriveEnabled               bool   `json:"google_drive_enabled"`
+	GoogleDriveFolderID              string `json:"google_drive_folder_id"`
+	QuickBooksEnabled                bool   `json:"quickbooks_enabled"`
 }
 
 // DocumentSuggestion is the response payload for /generate-suggestions endpoint and the request payload for /update-documents endpoint (as an array)
@@ -130,6 +141,50 @@ type DocumentSuggestion struct {
 	AddTags                []string                `json:"add_tags,omitempty"`
 	CustomFieldsWriteMode  string                  `json:"custom_fields_write_mode,omitempty"`
 	CustomFieldsEnable     bool                    `json:"custom_fields_enable"`
+	JobberCandidates       []JobberMatchCandidate  `json:"jobber_candidates,omitempty"`
+	SelectedJobberMatchID  string                  `json:"selected_jobber_match_id,omitempty"`
+	UploadToGoogleDrive    bool                    `json:"upload_to_google_drive,omitempty"`
+}
+
+type JobberMatchCandidate struct {
+	ID         string `json:"id"`
+	JobNumber  string `json:"job_number"`
+	ClientName string `json:"client_name"`
+	JobName    string `json:"job_name"`
+}
+
+func (c JobberMatchCandidate) DisplayLabel() string {
+	parts := []string{}
+	if c.JobNumber != "" {
+		parts = append(parts, c.JobNumber)
+	}
+	if c.ClientName != "" {
+		parts = append(parts, c.ClientName)
+	}
+	if c.JobName != "" {
+		parts = append(parts, c.JobName)
+	}
+	return strings.Join(parts, " - ")
+}
+
+type IntegrationConnectionStatus struct {
+	Provider    string `json:"provider"`
+	Configured  bool   `json:"configured"`
+	Connected   bool   `json:"connected"`
+	AccountName string `json:"account_name,omitempty"`
+	AccountID   string `json:"account_id,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+type DocumentIntegrationResult struct {
+	DocumentID            int    `json:"document_id"`
+	PaperlessUpdated      bool   `json:"paperless_updated"`
+	JobberApplied         bool   `json:"jobber_applied,omitempty"`
+	JobberError           string `json:"jobber_error,omitempty"`
+	GoogleDriveUploaded   bool   `json:"google_drive_uploaded,omitempty"`
+	GoogleDriveFileID     string `json:"google_drive_file_id,omitempty"`
+	GoogleDriveURL        string `json:"google_drive_url,omitempty"`
+	GoogleDriveError      string `json:"google_drive_error,omitempty"`
 }
 
 type Correspondent struct {
@@ -170,9 +225,11 @@ type ClientInterface interface {
 	GetAllDocumentTypes(ctx context.Context) ([]DocumentType, error)
 	GetCustomFields(ctx context.Context) ([]CustomField, error)
 	CreateTag(ctx context.Context, tagName string) (int, error)
+	DownloadPDF(ctx context.Context, document Document) ([]byte, error)
 	DownloadDocumentAsImages(ctx context.Context, documentID int, pageLimit int) ([]string, int, error)
 	DownloadDocumentAsPDF(ctx context.Context, documentID int, limitPages int, split bool) ([]string, []byte, int, error)
 	UploadDocument(ctx context.Context, data []byte, filename string, metadata map[string]interface{}) (string, error)
+	UpsertDocumentCustomFields(ctx context.Context, documentID int, fieldValues map[int]interface{}, db *gorm.DB) error
 	GetTaskStatus(ctx context.Context, taskID string) (map[string]interface{}, error)
 	DeleteDocument(ctx context.Context, documentID int) error
 }

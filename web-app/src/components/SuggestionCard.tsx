@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import ArrowTopRightOnSquareIcon from "@heroicons/react/24/outline/ArrowTopRightOnSquareIcon";
 import TrashIcon from "@heroicons/react/24/outline/TrashIcon";
 import { ReactTags } from "react-tag-autocomplete";
-import { DocumentSuggestion, TagOption } from "../DocumentProcessor";
+import { DocumentIntegrationResult, DocumentSuggestion, TagOption } from "../DocumentProcessor";
 
 interface SuggestionCardProps {
   suggestion: DocumentSuggestion;
@@ -14,6 +14,11 @@ interface SuggestionCardProps {
   onDocumentTypeChange: (docId: number, documentType: string) => void;
   onCreatedDateChange: (docId: number, createdDate: string) => void;
   onCustomFieldSuggestionToggle: (docId: number, fieldId: number) => void;
+  onJobberMatchChange: (docId: number, selectedJobId: string) => void;
+  onGoogleDriveToggle: (docId: number, enabled: boolean) => void;
+  jobberConnected: boolean;
+  googleDriveConnected: boolean;
+  integrationResult?: DocumentIntegrationResult;
   paperlessUrl?: string;
   onDelete?: (documentId: number) => void;
 }
@@ -28,11 +33,16 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   onDocumentTypeChange,
   onCreatedDateChange,
   onCustomFieldSuggestionToggle,
+  onJobberMatchChange,
+  onGoogleDriveToggle,
+  jobberConnected,
+  googleDriveConnected,
+  integrationResult,
   paperlessUrl,
   onDelete,
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const sortedAvailableTags = availableTags.sort((a, b) => a.name.localeCompare(b.name));
+  const sortedAvailableTags = [...availableTags].sort((a, b) => a.name.localeCompare(b.name));
   const document = suggestion.original_document;
 
   const handleDeleteClick = () => {
@@ -232,6 +242,94 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             </div>
           </div>
         )}
+        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Jobber Match
+            </label>
+            <select
+              value={suggestion.selected_jobber_match_id || ""}
+                onChange={(e) => onJobberMatchChange(suggestion.id, e.target.value)}
+              disabled={!jobberConnected || !suggestion.jobber_candidates?.length}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200 disabled:opacity-60"
+            >
+              <option value="">
+                {!jobberConnected
+                  ? "Connect Jobber in Settings"
+                  : suggestion.jobber_candidates?.length
+                    ? "No Jobber match"
+                    : "No Jobber matches found"}
+              </option>
+              {suggestion.jobber_candidates?.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.job_number} - {candidate.client_name} - {candidate.job_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id={`google-drive-${suggestion.id}`}
+              checked={suggestion.upload_to_google_drive ?? false}
+              disabled={!googleDriveConnected}
+              onChange={(e) => onGoogleDriveToggle(suggestion.id, e.target.checked)}
+              className="w-4 h-4 mt-1"
+            />
+            <div>
+              <label
+                htmlFor={`google-drive-${suggestion.id}`}
+                className="font-medium text-gray-700 dark:text-gray-300"
+              >
+                Upload to Google Drive
+              </label>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {!googleDriveConnected
+                  ? "Connect Google Drive in Settings to enable uploads."
+                  : "Uploads the approved Paperless file to the configured folder."}
+              </p>
+            </div>
+          </div>
+
+          {(integrationResult?.jobber_applied ||
+            integrationResult?.jobber_error ||
+            integrationResult?.google_drive_uploaded ||
+            integrationResult?.google_drive_error) && (
+            <div className="rounded border border-gray-200 dark:border-gray-700 p-3 text-sm">
+              <h4 className="font-semibold text-gray-700 dark:text-gray-300">Last apply result</h4>
+              {integrationResult?.jobber_applied && (
+                <p className="mt-1 text-green-700 dark:text-green-300">Jobber fields saved to Paperless.</p>
+              )}
+              {integrationResult?.jobber_error && (
+                <p className="mt-1 text-red-700 dark:text-red-300">Jobber: {integrationResult.jobber_error}</p>
+              )}
+              {integrationResult?.google_drive_uploaded && (
+                <p className="mt-1 text-green-700 dark:text-green-300">
+                  Google Drive upload completed
+                  {integrationResult.google_drive_url ? (
+                    <>
+                      {" "}
+                      <a
+                        className="underline"
+                        href={integrationResult.google_drive_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open file
+                      </a>
+                    </>
+                  ) : "."}
+                </p>
+              )}
+              {integrationResult?.google_drive_error && (
+                <p className="mt-1 text-red-700 dark:text-red-300">
+                  Google Drive: {integrationResult.google_drive_error}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

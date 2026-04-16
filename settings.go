@@ -6,6 +6,20 @@ import (
 	"path/filepath"
 )
 
+func defaultSettings() Settings {
+	return Settings{
+		CustomFieldsEnable:               false,
+		CustomFieldsSelectedIDs:          []int{},
+		CustomFieldsWriteMode:            "append",
+		RestrictTagsToExisting:           false,
+		RestrictCorrespondentsToExisting: false,
+		RestrictDocumentTypesToExisting:  false,
+		JobberEnabled:                    false,
+		GoogleDriveEnabled:               false,
+		QuickBooksEnabled:                false,
+	}
+}
+
 const (
 	configDir    = "config"
 	settingsFile = "settings.json"
@@ -46,14 +60,7 @@ func loadSettings() {
 
 	// Define default settings
 	loadDefaultSettings := func() {
-		settings = Settings{
-			CustomFieldsEnable:               false,
-			CustomFieldsSelectedIDs:          []int{},
-			CustomFieldsWriteMode:            "append",
-			RestrictTagsToExisting:           false,
-			RestrictCorrespondentsToExisting: false,
-			RestrictDocumentTypesToExisting:  false,
-		}
+		settings = defaultSettings()
 	}
 
 	if err != nil {
@@ -77,6 +84,15 @@ func loadSettings() {
 		log.Warnf("Failed to parse settings file, please check its format. Loading default settings. Error: %v", err)
 		loadDefaultSettings()
 		return
+	}
+
+	// Normalize zero-value slices / defaults for fields that may not exist in older settings files.
+	defaults := defaultSettings()
+	if settings.CustomFieldsSelectedIDs == nil {
+		settings.CustomFieldsSelectedIDs = defaults.CustomFieldsSelectedIDs
+	}
+	if settings.CustomFieldsWriteMode == "" {
+		settings.CustomFieldsWriteMode = defaults.CustomFieldsWriteMode
 	}
 
 	log.Info("Successfully loaded settings from settings.json")

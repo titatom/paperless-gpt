@@ -329,12 +329,14 @@ func (client *PaperlessClient) GetDocumentsByTag(ctx context.Context, tag string
 		}
 
 		documents = append(documents, Document{
-			ID:            result.ID,
-			Title:         result.Title,
-			Content:       result.Content,
-			Correspondent: correspondentName,
-			Tags:          tagNames,
-			CreatedDate:   result.CreatedDate,
+			ID:               result.ID,
+			Title:            result.Title,
+			Content:          result.Content,
+			Correspondent:    correspondentName,
+			Tags:             tagNames,
+			CreatedDate:      result.CreatedDate,
+			OriginalFileName: result.OriginalFileName,
+			ArchivedFileName: result.ArchivedFileName,
 		})
 	}
 
@@ -445,9 +447,83 @@ func (client *PaperlessClient) GetDocument(ctx context.Context, documentID int) 
 		Tags:             tagNames,
 		CreatedDate:      documentResponse.CreatedDate,
 		OriginalFileName: documentResponse.OriginalFileName,
+		ArchivedFileName: documentResponse.ArchivedFileName,
 		CustomFields:     documentResponse.CustomFields,
 		DocumentTypeName: documentTypeName,
 	}, nil
+}
+
+// UpsertDocumentCustomFields updates only the provided custom field IDs while preserving unrelated fields.
+func (client *PaperlessClient) UpsertDocumentCustomFields(ctx context.Context, documentID int, fieldValues map[int]interface{}, db *gorm.DB) error {
+	if len(fieldValues) == 0 {
+		return nil
+	}
+
+	currentDoc, err := client.GetDocument(ctx, documentID)
+	if err != nil {
+		return fmt.Errorf("error fetching current document %d: %w", documentID, err)
+	}
+
+	finalCustomFields := slices.Clone(currentDoc.CustomFields)
+	existingFieldsMap := make(map[int]*CustomFieldResponse)
+	for i := range finalCustomFields {
+		existingFieldsMap[finalCustomFields[i].Field] = &finalCustomFields[i]
+	}
+
+	for fieldID, value := range fieldValues {
+		if existing, ok := existingFieldsMap[fieldID]; ok {
+			existing.Value = value
+			continue
+		}
+		finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: fieldID, Value: value})
+	}
+
+	originalCustomFieldsJSON, _ := json.Marshal(currentDoc.CustomFields)
+	finalCustomFieldsJSON, _ := json.Marshal(finalCustomFields)
+	if string(originalCustomFieldsJSON) == string(finalCustomFieldsJSON) {
+		return nil
+	}
+
+	payload := map[string]interface{}{
+		"custom_fields": finalCustomFields,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshalling custom field payload for document %d: %w", documentID, err)
+	}
+
+	path := fmt.Sprintf("api/documents/%d/", documentID)
+	resp, err := client.Do(ctx, "PATCH", path, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error updating custom fields for document %d: %w", documentID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("error updating custom fields for document %d: %d, %s", documentID, resp.StatusCode, string(bodyBytes))
+	}
+
+	for fieldID, value := range fieldValues {
+		var previousValue interface{} = ""
+		for _, currentField := range currentDoc.CustomFields {
+			if currentField.Field == fieldID {
+				previousValue = currentField.Value
+				break
+			}
+		}
+		mod := ModificationHistory{
+			DocumentID:    uint(documentID),
+			ModField:      fmt.Sprintf("custom_field_%d", fieldID),
+			PreviousValue: fmt.Sprintf("%v", previousValue),
+			NewValue:      fmt.Sprintf("%v", value),
+		}
+		if err := InsertModification(db, &mod); err != nil {
+			return fmt.Errorf("error inserting custom field modification record for document %d: %w", documentID, err)
+		}
+	}
+
+	return nil
 }
 
 // UpdateDocuments updates the specified documents with suggested changes

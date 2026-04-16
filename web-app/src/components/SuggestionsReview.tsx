@@ -1,10 +1,12 @@
 import React from "react";
-import { DocumentSuggestion, TagOption } from "../DocumentProcessor";
+import { DocumentSuggestion, DocumentIntegrationResult, IntegrationStatus, TagOption } from "../DocumentProcessor";
 import SuggestionCard from "./SuggestionCard";
 
 interface SuggestionsReviewProps {
   suggestions: DocumentSuggestion[];
   availableTags: TagOption[];
+  integrationStatuses: Record<string, IntegrationStatus>;
+  integrationResults: DocumentIntegrationResult[];
   onTitleChange: (docId: number, title: string) => void;
   onTagAddition: (docId: number, tag: TagOption) => void;
   onTagDeletion: (docId: number, index: number) => void;
@@ -12,6 +14,8 @@ interface SuggestionsReviewProps {
   onDocumentTypeChange: (docId: number, documentType: string) => void;
   onCreatedDateChange: (docId: number, createdDate: string) => void;
   onCustomFieldSuggestionToggle: (docId: number, fieldId: number) => void;
+  onJobberMatchChange: (docId: number, candidateId: string) => void;
+  onGoogleDriveToggle: (docId: number, checked: boolean) => void;
   onBack: () => void;
   onUpdate: () => void;
   updating: boolean;
@@ -22,6 +26,8 @@ interface SuggestionsReviewProps {
 const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
   suggestions,
   availableTags,
+  integrationStatuses,
+  integrationResults,
   onTitleChange,
   onTagAddition,
   onTagDeletion,
@@ -29,6 +35,8 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
   onDocumentTypeChange,
   onCreatedDateChange,
   onCustomFieldSuggestionToggle,
+  onJobberMatchChange,
+  onGoogleDriveToggle,
   onBack,
   onUpdate,
   updating,
@@ -52,6 +60,11 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
           onDocumentTypeChange={onDocumentTypeChange}
           onCreatedDateChange={onCreatedDateChange}
           onCustomFieldSuggestionToggle={onCustomFieldSuggestionToggle}
+          onJobberMatchChange={onJobberMatchChange}
+          onGoogleDriveToggle={onGoogleDriveToggle}
+          jobberConnected={!!integrationStatuses.jobber?.connected}
+          googleDriveConnected={!!integrationStatuses.google_drive?.connected}
+          integrationResult={integrationResults.find((result) => result.document_id === doc.id)}
           paperlessUrl={paperlessUrl}
           onDelete={onDeleteDocument}
         />
