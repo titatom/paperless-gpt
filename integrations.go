@@ -140,9 +140,19 @@ func generateOAuthStateToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func getExternalBaseURL(c *gin.Context) string {
+func configuredPublicBaseURL() string {
 	if configured := strings.TrimSpace(os.Getenv("PAPERLESS_GPT_PUBLIC_URL")); configured != "" {
 		return strings.TrimRight(configured, "/")
+	}
+	if configured := strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")); configured != "" {
+		return strings.TrimRight(configured, "/")
+	}
+	return ""
+}
+
+func getExternalBaseURL(c *gin.Context) string {
+	if configured := configuredPublicBaseURL(); configured != "" {
+		return configured
 	}
 
 	scheme := c.Request.Header.Get("X-Forwarded-Proto")
@@ -627,11 +637,11 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 	if err != nil {
 		return nil, err
 	}
-	baseURL := strings.TrimSpace(os.Getenv("PAPERLESS_GPT_PUBLIC_URL"))
+	baseURL := configuredPublicBaseURL()
 	if baseURL == "" {
-		return nil, fmt.Errorf("PAPERLESS_GPT_PUBLIC_URL is required for Jobber receipt attachment")
+		return nil, fmt.Errorf("APP_PUBLIC_URL or PAPERLESS_GPT_PUBLIC_URL is required for Jobber receipt attachment")
 	}
-	receiptURL := strings.TrimRight(baseURL, "/") + "/api/integrations/jobber/receipt/" + url.PathEscape(receiptToken.Token)
+	receiptURL := baseURL + "/api/integrations/jobber/receipt/" + url.PathEscape(receiptToken.Token)
 
 	input := map[string]interface{}{
 		"title":       title,

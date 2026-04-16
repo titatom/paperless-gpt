@@ -1,10 +1,22 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
+
+func newIntegrationTestContext(req *http.Request) *gin.Context {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	return c
+}
 
 func TestJobberMatchCandidateDisplayLabel(t *testing.T) {
 	candidate := JobberMatchCandidate{
@@ -134,6 +146,47 @@ func TestGetIntegrationProviderJobberRequiresBothEnvVars(t *testing.T) {
 	}
 	if reason == "" {
 		t.Fatal("expected non-empty reason when env vars are missing")
+	}
+}
+
+func TestConfiguredPublicBaseURLPrefersLegacyOverride(t *testing.T) {
+	t.Setenv("APP_PUBLIC_URL", "https://paperless-gpt.thomasrich.ca")
+	t.Setenv("PAPERLESS_GPT_PUBLIC_URL", "https://legacy.paperless-gpt.example.com/")
+
+	got := configuredPublicBaseURL()
+	want := "https://legacy.paperless-gpt.example.com"
+	if got != want {
+		t.Fatalf("configuredPublicBaseURL() = %q, want %q", got, want)
+	}
+}
+
+func TestOAuthCallbackURLUsesAppPublicURL(t *testing.T) {
+	t.Setenv("APP_PUBLIC_URL", "https://paperless-gpt.thomasrich.ca/")
+	t.Setenv("PAPERLESS_GPT_PUBLIC_URL", "")
+
+	req := httptest.NewRequest(http.MethodGet, "http://192.168.1.20:8036/api/integrations/jobber/connect/start", nil)
+	req.Host = "192.168.1.20:8036"
+
+	got := oauthCallbackURL(newIntegrationTestContext(req), integrationProviderJobber)
+	want := "https://paperless-gpt.thomasrich.ca/api/integrations/jobber/oauth/callback"
+	if got != want {
+		t.Fatalf("oauthCallbackURL() = %q, want %q", got, want)
+	}
+}
+
+func TestGetExternalBaseURLFallsBackToForwardedHeaders(t *testing.T) {
+	t.Setenv("APP_PUBLIC_URL", "")
+	t.Setenv("PAPERLESS_GPT_PUBLIC_URL", "")
+
+	req := httptest.NewRequest(http.MethodGet, "http://192.168.1.20:8036/api/integrations/jobber/connect/start", nil)
+	req.Host = "192.168.1.20:8036"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "paperless-gpt.thomasrich.ca")
+
+	got := getExternalBaseURL(newIntegrationTestContext(req))
+	want := "https://paperless-gpt.thomasrich.ca"
+	if got != want {
+		t.Fatalf("getExternalBaseURL() = %q, want %q", got, want)
 	}
 }
 

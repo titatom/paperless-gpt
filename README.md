@@ -157,6 +157,7 @@ services:
       PAPERLESS_BASE_URL: "http://paperless-ngx:8000"
       PAPERLESS_API_TOKEN: "your_paperless_api_token"
       PAPERLESS_PUBLIC_URL: "http://paperless.mydomain.com" # Optional
+      APP_PUBLIC_URL: "https://paperless-gpt.mydomain.com" # Recommended for OAuth callbacks and Jobber receipt links
       MANUAL_TAG: "paperless-gpt" # Optional, default: paperless-gpt
       AUTO_TAG: "paperless-gpt-auto" # Optional, default: paperless-gpt-auto
       # LLM Configuration - Choose one:
@@ -580,6 +581,8 @@ For best results with the enhanced OCR features:
 | `PAPERLESS_BASE_URL`                | URL of your paperless-ngx instance (e.g. `http://paperless-ngx:8000`).                                                                                                                        | Yes      |                            |
 | `PAPERLESS_API_TOKEN`               | API token for paperless-ngx. Generate one in paperless-ngx admin.                                                                                                                             | Yes      |                            |
 | `PAPERLESS_PUBLIC_URL`              | Public URL for Paperless (if different from `PAPERLESS_BASE_URL`).                                                                                                                            | No       |                            |
+| `APP_PUBLIC_URL`                    | Public URL for this paperless-gpt instance. Used to build OAuth callback URLs and Jobber receipt links when running behind a reverse proxy. For Jobber, register `${APP_PUBLIC_URL}/api/integrations/jobber/oauth/callback`. | No       |                            |
+| `PAPERLESS_GPT_PUBLIC_URL`          | Legacy alias for `APP_PUBLIC_URL`, kept for backward compatibility with existing deployments.                                                                                                 | No       |                            |
 | `MANUAL_TAG`                        | Tag for manual processing.                                                                                                                                                                    | No       | paperless-gpt              |
 | `AUTO_TAG`                          | Tag for auto processing.                                                                                                                                                                      | No       | paperless-gpt-auto         |
 | `LLM_PROVIDER`                      | AI backend (`openai`, `ollama`, `googleai`, `mistral`, or `anthropic`).                                                                                                                       | Yes      |                            |
