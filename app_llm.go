@@ -395,14 +395,9 @@ func (app *App) getSuggestedCreatedDate(ctx context.Context, content string, log
 	return strings.TrimSpace(strings.Trim(result, "\"")), nil
 }
 
-// getSuggestedCustomFields generates suggested custom fields for a document using the LLM
-func (app *App) getSuggestedCustomFields(ctx context.Context, doc Document, selectedFieldIDs []int, logger *logrus.Entry) ([]CustomFieldSuggestion, error) {
-	// Fetch all available custom fields
-	allCustomFields, err := app.Client.GetCustomFields(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching all custom fields: %v", err)
-	}
-
+// getSuggestedCustomFields generates suggested custom fields for a document using the LLM.
+// allCustomFields must be pre-fetched by the caller to avoid redundant API calls per document.
+func (app *App) getSuggestedCustomFields(ctx context.Context, doc Document, selectedFieldIDs []int, allCustomFields []CustomField, logger *logrus.Entry) ([]CustomFieldSuggestion, error) {
 	// Filter to get only the selected custom fields
 	var selectedCustomFields []CustomField
 	for _, field := range allCustomFields {
@@ -558,6 +553,20 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 		availableDocumentTypeNames = append(availableDocumentTypeNames, docType.Name)
 	}
 
+	// Pre-fetch custom fields once for all documents to avoid N redundant API calls.
+	var allCustomFields []CustomField
+	if suggestionRequest.GenerateCustomFields {
+		settingsMutex.RLock()
+		hasSelectedIDs := len(settings.CustomFieldsSelectedIDs) > 0
+		settingsMutex.RUnlock()
+		if hasSelectedIDs {
+			allCustomFields, err = app.Client.GetCustomFields(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch custom fields: %v", err)
+			}
+		}
+	}
+
 	documents := suggestionRequest.Documents
 	documentSuggestions := []DocumentSuggestion{}
 
@@ -652,7 +661,7 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 				if len(selectedIDs) == 0 {
 					log.Warnf("Custom field generation is enabled, but no custom fields are selected in the settings. Please select at least one custom field for this feature to work.")
 				} else {
-					suggestedCustomFields, gerr = app.getSuggestedCustomFields(ctx, doc, selectedIDs, docLogger)
+					suggestedCustomFields, gerr = app.getSuggestedCustomFields(ctx, doc, selectedIDs, allCustomFields, docLogger)
 					if gerr != nil {
 						mu.Lock()
 						errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))

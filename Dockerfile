@@ -114,6 +114,15 @@ COPY --from=builder /app/paperless-gpt .
 # Copy the prompt templates
 COPY default_prompts/ /app/default_prompts/
 
+# Declare persistent data directories.
+# Mount these to host paths or named volumes to preserve settings,
+# database, and user accounts across container updates.
+# Example (docker-compose):
+#   volumes:
+#     - /path/on/host/config:/app/config
+#     - /path/on/host/db:/app/db
+VOLUME ["/app/config", "/app/db"]
+
 # Expose the port the app runs on
 EXPOSE 8080
 

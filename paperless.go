@@ -30,6 +30,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// createdDateRegexp matches the YYYY-MM-DD date format required by Paperless-ngx.
+var createdDateRegexp = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
 // PaperlessClient struct to interact with the Paperless-NGX API
 type PaperlessClient struct {
 	BaseURL     string
@@ -306,33 +309,28 @@ func (client *PaperlessClient) GetDocumentsByTag(ctx context.Context, tag string
 		return nil, err
 	}
 
+	// Build reverse maps (ID → name) once for all documents.
+	tagIDToName := make(map[int]string, len(allTags))
+	for name, id := range allTags {
+		tagIDToName[id] = name
+	}
+	corrIDToName := make(map[int]string, len(allCorrespondents))
+	for name, id := range allCorrespondents {
+		corrIDToName[id] = name
+	}
+
 	documents := make([]Document, 0, len(documentsResponse.Results))
 	for _, result := range documentsResponse.Results {
 		tagNames := make([]string, len(result.Tags))
 		for i, resultTagID := range result.Tags {
-			for tagName, tagID := range allTags {
-				if resultTagID == tagID {
-					tagNames[i] = tagName
-					break
-				}
-			}
-		}
-
-		correspondentName := ""
-		if result.Correspondent != 0 {
-			for name, id := range allCorrespondents {
-				if result.Correspondent == id {
-					correspondentName = name
-					break
-				}
-			}
+			tagNames[i] = tagIDToName[resultTagID]
 		}
 
 		documents = append(documents, Document{
 			ID:               result.ID,
 			Title:            result.Title,
 			Content:          result.Content,
-			Correspondent:    correspondentName,
+			Correspondent:    corrIDToName[result.Correspondent],
 			Tags:             tagNames,
 			CreatedDate:      result.CreatedDate,
 			OriginalFileName: result.OriginalFileName,
@@ -406,25 +404,24 @@ func (client *PaperlessClient) GetDocument(ctx context.Context, documentID int) 
 		}
 	}
 
+	// Build reverse maps (ID → name) for O(1) resolution.
+	tagIDToName := make(map[int]string, len(allTags))
+	for name, id := range allTags {
+		tagIDToName[id] = name
+	}
+	corrIDToName := make(map[int]string, len(allCorrespondents))
+	for name, id := range allCorrespondents {
+		corrIDToName[id] = name
+	}
+
 	// Match tag IDs to tag names
 	tagNames := make([]string, len(documentResponse.Tags))
 	for i, resultTagID := range documentResponse.Tags {
-		for tagName, tagID := range allTags {
-			if resultTagID == tagID {
-				tagNames[i] = tagName
-				break
-			}
-		}
+		tagNames[i] = tagIDToName[resultTagID]
 	}
 
 	// Match correspondent ID to correspondent name
-	correspondentName := ""
-	for name, id := range allCorrespondents {
-		if documentResponse.Correspondent == id {
-			correspondentName = name
-			break
-		}
-	}
+	correspondentName := corrIDToName[documentResponse.Correspondent]
 
 	// Get all document types to find the name
 	allDocumentTypes, err := client.GetAllDocumentTypes(ctx)
@@ -661,7 +658,7 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 		suggestedCreatedDate := document.SuggestedCreatedDate
 		if suggestedCreatedDate != "" {
 			// Validate format YYYY-MM-DD
-			if matched := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(suggestedCreatedDate); matched {
+			if createdDateRegexp.MatchString(suggestedCreatedDate) {
 				originalFields["created_date"] = document.OriginalDocument.CreatedDate
 				updatedFields["created_date"] = suggestedCreatedDate
 			} else {
@@ -681,23 +678,15 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 			finalCustomFields := slices.Clone(originalDoc.CustomFields)
 			originalCustomFieldsJSON, _ := json.Marshal(originalDoc.CustomFields)
 
-			switch document.CustomFieldsWriteMode {
+			writeMode := document.CustomFieldsWriteMode
+			if writeMode == "" {
+				writeMode = "update"
+			}
+			switch writeMode {
 			case "replace":
 				finalCustomFields = []CustomFieldResponse{}
 				for _, sf := range document.SuggestedCustomFields {
 					finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
-				}
-			case "update":
-				existingFieldsMap := make(map[int]*CustomFieldResponse)
-				for i := range finalCustomFields {
-					existingFieldsMap[finalCustomFields[i].Field] = &finalCustomFields[i]
-				}
-				for _, sf := range document.SuggestedCustomFields {
-					if ef, ok := existingFieldsMap[sf.ID]; ok {
-						ef.Value = sf.Value
-					} else {
-						finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
-					}
 				}
 			case "append":
 				existingFieldsMap := make(map[int]bool)
@@ -706,6 +695,18 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 				}
 				for _, sf := range document.SuggestedCustomFields {
 					if _, exists := existingFieldsMap[sf.ID]; !exists {
+						finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
+					}
+				}
+			default: // "update" or any unrecognized mode
+				existingFieldsMap := make(map[int]*CustomFieldResponse)
+				for i := range finalCustomFields {
+					existingFieldsMap[finalCustomFields[i].Field] = &finalCustomFields[i]
+				}
+				for _, sf := range document.SuggestedCustomFields {
+					if ef, ok := existingFieldsMap[sf.ID]; ok {
+						ef.Value = sf.Value
+					} else {
 						finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
 					}
 				}
@@ -805,14 +806,14 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 						if err == nil {
 							defer tagResp.Body.Close()
 							if tagResp.StatusCode == http.StatusOK {
-								log.Infof("Document %d: Successfully removed auto/manual tag", documentID)
-								// Record this tag change with tag names for both PreviousValue and NewValue
-								mod := ModificationHistory{
-									DocumentID:    uint(documentID),
-									ModField:      "tags",
-									PreviousValue: fmt.Sprintf("%v", originalDoc.Tags),
-									NewValue:      fmt.Sprintf("%v", remainingTagNames),
-								}
+						log.Infof("Document %d: Successfully removed auto/manual tag", documentID)
+							// Record this tag change with tag names for both PreviousValue and NewValue
+							mod := ModificationHistory{
+								DocumentID:    uint(documentID),
+								ModField:      "tags",
+								PreviousValue: marshalModificationValue(originalDoc.Tags),
+								NewValue:      marshalModificationValue(remainingTagNames),
+							}
 								if err := InsertModification(db, &mod); err != nil {
 									log.Warnf("Error inserting tag modification record: %v", err)
 								}
@@ -834,11 +835,13 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 				}
 			}
 			log.Printf("Document %d: Updated %s from %v to %v", documentID, field, value, updatedFields[field])
+			prevStr := marshalModificationValue(value)
+			newStr := marshalModificationValue(updatedFields[field])
 			mod := ModificationHistory{
 				DocumentID:    uint(documentID),
 				ModField:      field,
-				PreviousValue: fmt.Sprintf("%v", value),
-				NewValue:      fmt.Sprintf("%v", updatedFields[field]),
+				PreviousValue: prevStr,
+				NewValue:      newStr,
 			}
 			if err := InsertModification(db, &mod); err != nil {
 				return fmt.Errorf("error inserting modification record for document %d: %w", documentID, err)
@@ -1198,6 +1201,20 @@ func (client *PaperlessClient) GetCacheFolder() string {
 		client.CacheFolder = filepath.Join(os.TempDir(), "paperless-gpt")
 	}
 	return client.CacheFolder
+}
+
+// marshalModificationValue serializes a value for storage in ModificationHistory.
+// Slices and maps are JSON-encoded so they can be round-tripped; other values
+// fall back to fmt.Sprintf so existing string/int fields are unchanged.
+func marshalModificationValue(value interface{}) string {
+	switch v := value.(type) {
+	case []string, []int, map[string]interface{}:
+		b, err := json.Marshal(v)
+		if err == nil {
+			return string(b)
+		}
+	}
+	return fmt.Sprintf("%v", value)
 }
 
 // urlEncode encodes a string for safe URL usage

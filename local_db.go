@@ -61,7 +61,7 @@ func InitializeDB() *gorm.DB {
 	}
 
 	// Migrate the schema (create the tables if they don't exist)
-	err = db.AutoMigrate(&ModificationHistory{}, &OCRPageResult{}, &IntegrationConnection{}, &OAuthStateRecord{}, &IntegrationActionLog{}, &IntegrationReceiptShare{}, &User{}, &UserSession{})
+	err = db.AutoMigrate(&ModificationHistory{}, &OCRPageResult{}, &IntegrationConnection{}, &OAuthStateRecord{}, &IntegrationActionLog{}, &IntegrationReceiptShare{}, &ReceiptAccessToken{}, &User{}, &UserSession{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database schema: %v", err)
 	}
@@ -74,7 +74,7 @@ func InsertModification(db *gorm.DB, record *ModificationHistory) error {
 	log.Debugf("Passed modification record: %+v", record)
 	record.DateChanged = time.Now().Format(time.RFC3339) // Set the DateChanged field to the current time
 	log.Debugf("Inserting modification record: %+v", record)
-	result := db.Create(&record) // GORM's Create method
+	result := db.Create(record) // GORM's Create method
 	log.Debugf("Insertion result: %+v", result)
 	return result.Error
 }
