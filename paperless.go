@@ -1204,17 +1204,25 @@ func (client *PaperlessClient) GetCacheFolder() string {
 }
 
 // marshalModificationValue serializes a value for storage in ModificationHistory.
-// Slices and maps are JSON-encoded so they can be round-tripped; other values
-// fall back to fmt.Sprintf so existing string/int fields are unchanged.
+// Strings are stored as-is. Slices and structs are JSON-encoded so they can be
+// round-tripped correctly (e.g. for the undo handler's json.Unmarshal on tags).
+// Other scalar values fall back to fmt.Sprintf.
 func marshalModificationValue(value interface{}) string {
+	if value == nil {
+		return ""
+	}
 	switch v := value.(type) {
-	case []string, []int, map[string]interface{}:
+	case string:
+		return v
+	case int, int64, int32, uint, uint64, float64, float32, bool:
+		return fmt.Sprintf("%v", v)
+	default:
 		b, err := json.Marshal(v)
 		if err == nil {
 			return string(b)
 		}
+		return fmt.Sprintf("%v", v)
 	}
-	return fmt.Sprintf("%v", value)
 }
 
 // urlEncode encodes a string for safe URL usage

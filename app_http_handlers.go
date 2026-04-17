@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -57,20 +58,32 @@ func updatePromptsHandler(c *gin.Context) {
 		return
 	}
 
-	// Basic input validation
-	if req.Filename == "" || !strings.HasSuffix(req.Filename, ".tmpl") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename or missing .tmpl extension"})
+	// Basic input validation: require a .tmpl extension and a simple basename
+	// (no path separators, no absolute paths, no dot-sequences).
+	base := filepath.Base(req.Filename)
+	if req.Filename == "" || base != req.Filename || !strings.HasSuffix(base, ".tmpl") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename: must be a plain filename ending in .tmpl"})
 		return
 	}
-	if containsDotDot(req.Filename) {
+	if containsDotDot(req.Filename) || strings.ContainsAny(req.Filename, "/\\") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename: path traversal is not allowed"})
 		return
 	}
 
-	promptPath := filepath.Join("prompts", req.Filename)
+	// Verify the resolved path stays inside the prompts directory.
+	promptsDir, err := filepath.Abs("prompts")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
+		return
+	}
+	promptPath := filepath.Join(promptsDir, base)
+	if !strings.HasPrefix(promptPath, promptsDir+string(os.PathSeparator)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid filename: path traversal is not allowed"})
+		return
+	}
 
 	// Validate template content
-	_, err := template.New(req.Filename).Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(req.Content)
+	_, err = template.New(req.Filename).Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(req.Content)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid template content: %v", err)})
 		return
@@ -318,6 +331,9 @@ func (app *App) startIntegrationConnectHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"redirect_url": authURL})
 }
 
+// oauthPopupHTMLTemplate is rendered for OAuth callback popup windows.
+// Dynamic values are placed only inside JSON (safe for script) or as escaped
+// HTML text — never as raw HTML or unescaped script strings.
 const oauthPopupHTMLTemplate = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>%s</title></head>
@@ -326,7 +342,7 @@ const oauthPopupHTMLTemplate = `<!DOCTYPE html>
 (function() {
   var msg = %s;
   if (window.opener) {
-    try { window.opener.postMessage(msg, '*'); } catch(e) {}
+    try { window.opener.postMessage(msg, window.location.origin); } catch(e) {}
   }
   setTimeout(function() { window.close(); }, 2000);
 })();
@@ -342,7 +358,23 @@ func oauthPopupResponse(c *gin.Context, status int, title, message string, msgPa
 		jsonBytes = []byte("{}")
 	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(status, oauthPopupHTMLTemplate, title, string(jsonBytes), message)
+	// HTML-escape all user-visible strings so query-parameter values cannot
+	// inject HTML or script into the popup page.
+	c.String(status, oauthPopupHTMLTemplate,
+		htmlEscape(title),
+		string(jsonBytes), // already safe JSON
+		htmlEscape(message),
+	)
+}
+
+// htmlEscape escapes s for safe inclusion in HTML text content.
+func htmlEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&#34;")
+	s = strings.ReplaceAll(s, "'", "&#39;")
+	return s
 }
 
 func (app *App) integrationOAuthCallbackHandler(c *gin.Context) {
@@ -468,7 +500,7 @@ func (app *App) jobberReceiptHandler(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", "application/pdf")
-	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	c.Header("Content-Disposition", safeContentDisposition("inline", filename))
 	c.Writer.WriteHeader(http.StatusOK)
 	_, _ = c.Writer.Write(content)
 }
@@ -1078,4 +1110,23 @@ func getVersionHandler(c *gin.Context) {
 // containsDotDot checks if a string contains ".." to prevent path traversal.
 func containsDotDot(s string) bool {
 	return strings.Contains(s, "..")
+}
+
+// safeContentDisposition builds a Content-Disposition header value that is safe
+// against header injection by stripping CR/LF and quoting control characters.
+// It follows RFC 6266 by providing both a sanitised ASCII fallback and a
+// percent-encoded UTF-8 filename* parameter.
+func safeContentDisposition(disposition, filename string) string {
+	// Strip characters that would break the header (CR, LF, NUL, double-quote).
+	safe := strings.Map(func(r rune) rune {
+		if r == '\r' || r == '\n' || r == 0 || r == '"' {
+			return -1
+		}
+		return r
+	}, filepath.Base(filename))
+	if safe == "" || safe == "." {
+		safe = "download"
+	}
+	return fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`,
+		disposition, safe, url.PathEscape(filename))
 }

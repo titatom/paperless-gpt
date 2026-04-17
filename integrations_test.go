@@ -88,12 +88,10 @@ func TestIssueAndConsumeReceiptAccessToken(t *testing.T) {
 		t.Fatalf("expected document ID 42, got %d", record.DocumentID)
 	}
 
-	record2, err := service.ConsumeReceiptAccessToken(t.Context(), token.Token)
-	if err != nil {
-		t.Fatalf("second ConsumeReceiptAccessToken() error = %v", err)
-	}
-	if record2.DocumentID != 42 {
-		t.Fatalf("expected second lookup document ID 42, got %d", record2.DocumentID)
+	// Tokens are single-use: second consume must fail because the row was deleted.
+	_, err = service.ConsumeReceiptAccessToken(t.Context(), token.Token)
+	if err == nil {
+		t.Fatal("expected error on second ConsumeReceiptAccessToken(), got nil")
 	}
 }
 

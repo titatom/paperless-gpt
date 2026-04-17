@@ -741,13 +741,23 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 
 func buildMultipartDriveUpload(metadataJSON []byte, fileContent []byte, filename string) (io.Reader, string, error) {
 	boundary := "paperless-gpt-drive-upload"
+	// Strip characters that would break MIME headers before embedding in Content-Disposition.
+	safeFilename := strings.Map(func(r rune) rune {
+		if r == '\r' || r == '\n' || r == 0 || r == '"' {
+			return -1
+		}
+		return r
+	}, filename)
+	if safeFilename == "" {
+		safeFilename = "document.pdf"
+	}
 	var header bytes.Buffer
 	header.WriteString("--" + boundary + "\r\n")
 	header.WriteString("Content-Type: application/json; charset=UTF-8\r\n\r\n")
 	header.Write(metadataJSON)
 	header.WriteString("\r\n--" + boundary + "\r\n")
 	header.WriteString("Content-Type: application/octet-stream\r\n")
-	header.WriteString(fmt.Sprintf("Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n\r\n", filename))
+	header.WriteString(fmt.Sprintf("Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n\r\n", safeFilename))
 	footer := []byte("\r\n--" + boundary + "--\r\n")
 	reader := io.MultiReader(&header, bytes.NewReader(fileContent), bytes.NewReader(footer))
 	return reader, "multipart/related; boundary=" + boundary, nil

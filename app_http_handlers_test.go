@@ -126,7 +126,9 @@ func TestUpdatePromptsHandler(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
-	t.Run("File not found", func(t *testing.T) {
+	t.Run("New file created when it does not exist", func(t *testing.T) {
+		// The handler creates the file if it doesn't exist yet (os.WriteFile with any name
+		// inside the prompts dir succeeds as long as the dir exists).
 		payload := gin.H{
 			"filename": "non_existent_prompt.tmpl",
 			"content":  "Some content",
@@ -138,14 +140,44 @@ func TestUpdatePromptsHandler(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		// This test is now for a successful creation of a new file, which the handler should do.
-		// The handler logic will be updated in the next step.
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	t.Run("Path traversal attempt", func(t *testing.T) {
+	t.Run("Path traversal attempt with ..", func(t *testing.T) {
 		payload := gin.H{
 			"filename": "../evil.tmpl",
+			"content":  "irrelevant",
+		}
+		jsonPayload, _ := json.Marshal(payload)
+
+		req, _ := http.NewRequest("POST", "/api/prompts", bytes.NewBuffer(jsonPayload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("Absolute path traversal attempt", func(t *testing.T) {
+		// filepath.Join("prompts", "/etc/passwd.tmpl") resolves to /etc/passwd.tmpl
+		// on Unix — this must be rejected.
+		payload := gin.H{
+			"filename": "/etc/passwd.tmpl",
+			"content":  "irrelevant",
+		}
+		jsonPayload, _ := json.Marshal(payload)
+
+		req, _ := http.NewRequest("POST", "/api/prompts", bytes.NewBuffer(jsonPayload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("Embedded slash traversal attempt", func(t *testing.T) {
+		payload := gin.H{
+			"filename": "subdir/evil.tmpl",
 			"content":  "irrelevant",
 		}
 		jsonPayload, _ := json.Marshal(payload)

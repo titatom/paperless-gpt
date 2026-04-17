@@ -36,8 +36,8 @@ func saveSettings() error {
 // saveSettingsLocked performs the actual saving without locking the mutex.
 // This is to be called from functions that already hold the lock.
 func saveSettingsLocked() error {
-	// Ensure the config directory exists
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	// Ensure the config directory exists (owner-only to protect secrets inside)
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return err
 	}
 
@@ -47,8 +47,8 @@ func saveSettingsLocked() error {
 		return err
 	}
 
-	// Write the file
-	return os.WriteFile(filepath.Join(configDir, settingsFile), data, 0644)
+	// Write the file with owner-read-write only (contains API tokens / field IDs)
+	return os.WriteFile(filepath.Join(configDir, settingsFile), data, 0600)
 }
 
 // loadSettings loads the settings from settings.json, creating it with defaults if it doesn't exist or is corrupt.

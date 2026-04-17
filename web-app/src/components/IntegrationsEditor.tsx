@@ -258,7 +258,8 @@ const IntegrationsEditor: React.FC = () => {
     };
 
     const onMessage = (event: MessageEvent) => {
-      // Only handle messages that look like our OAuth result.
+      // Only accept messages from our own origin to prevent cross-origin injection.
+      if (event.origin !== window.location.origin) return;
       if (!event.data || typeof event.data !== 'object') return;
       const { type, error } = event.data as { type?: string; error?: string };
       if (type === 'oauth_success') {
