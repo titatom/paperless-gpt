@@ -46,9 +46,9 @@ type IntegrationReceiptShare struct {
 
 // InitializeDB initializes the SQLite database and migrates the schema
 func InitializeDB() *gorm.DB {
-	// Ensure db directory exists
+	// Ensure db directory exists (owner-only: contains OAuth tokens, sessions, users)
 	dbDir := "db"
-	if err := os.MkdirAll(dbDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dbDir, 0700); err != nil {
 		log.Fatalf("Failed to create db directory: %v", err)
 	}
 

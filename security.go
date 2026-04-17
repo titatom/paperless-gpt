@@ -161,9 +161,19 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
-		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// Content-Security-Policy: restrict resource origins to self.
+		// 'unsafe-inline' is required for the OAuth popup's inline <script>;
+		// all other content (images, styles, fonts, API calls) is self-only.
+		c.Header("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data:; "+
+				"font-src 'self' data:; "+
+				"connect-src 'self'; "+
+				"frame-ancestors 'none'")
 		c.Next()
 	}
 }
@@ -172,6 +182,13 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 type ipVisitor struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
+}
+
+// loginRateLimitMiddleware returns a stricter per-IP rate limiter for authentication
+// endpoints to slow credential-stuffing attacks. Allows 5 attempts per minute per IP.
+func loginRateLimitMiddleware() gin.HandlerFunc {
+	// 1 attempt per 12 seconds = ~5/minute, burst of 5
+	return rateLimitMiddleware(1.0/12, 5)
 }
 
 // rateLimitMiddleware returns a Gin middleware that enforces per-client-IP rate limiting.

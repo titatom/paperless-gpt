@@ -399,11 +399,13 @@ func main() {
 	authGroup := router.Group("/api/auth")
 	{
 		authGroup.GET("/setup/status", app.setupStatusHandler)
-		authGroup.POST("/setup", app.createFirstAdminHandler)
-		authGroup.POST("/login", app.loginHandler)
+		// Apply a strict rate limit to credential-accepting endpoints to slow
+		// brute-force / credential-stuffing attacks (~5 attempts per minute per IP).
+		authGroup.POST("/setup", loginRateLimitMiddleware(), app.createFirstAdminHandler)
+		authGroup.POST("/login", loginRateLimitMiddleware(), app.loginHandler)
 		authGroup.POST("/logout", app.logoutHandler)
 		authGroup.GET("/me", app.meHandler)
-		authGroup.POST("/change-password", app.changePasswordHandler)
+		authGroup.POST("/change-password", loginRateLimitMiddleware(), app.changePasswordHandler)
 	}
 
 	// API routes

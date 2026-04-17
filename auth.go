@@ -142,7 +142,17 @@ func setSessionCookie(c *gin.Context, sessionID string, secure bool) {
 }
 
 func clearSessionCookie(c *gin.Context) {
-	c.SetCookie(sessionCookieName, "", -1, "/", "", false, true)
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	cookie := &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		MaxAge:   -1,
+		Path:     "/",
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(c.Writer, cookie)
 }
 
 // ---------------------------------------------------------------------------
@@ -278,14 +288,9 @@ func (app *App) setupStatusHandler(c *gin.Context) {
 
 // createFirstAdminHandler — POST /api/auth/setup
 // Creates the first admin account. Returns 403 once a user already exists.
+// The count-check and insert run inside a single transaction to prevent a
+// race where two concurrent requests both see count==0 and create two accounts.
 func (app *App) createFirstAdminHandler(c *gin.Context) {
-	var count int64
-	app.Database.Model(&User{}).Count(&count)
-	if count > 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Setup already completed"})
-		return
-	}
-
 	var req setupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
@@ -311,9 +316,26 @@ func (app *App) createFirstAdminHandler(c *gin.Context) {
 		Username:       strings.TrimSpace(req.Username),
 		HashedPassword: hashed,
 	}
-	if err := app.Database.Create(user).Error; err != nil {
+
+	var created bool
+	txErr := app.Database.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&User{}).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil // signal "already exists" without error
+		}
+		created = true
+		return tx.Create(user).Error
+	})
+	if txErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-		log.Errorf("createFirstAdminHandler: %v", err)
+		log.Errorf("createFirstAdminHandler: %v", txErr)
+		return
+	}
+	if !created {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Setup already completed"})
 		return
 	}
 
