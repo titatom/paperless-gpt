@@ -350,6 +350,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             {(integrationResult?.jobber_applied ||
               integrationResult?.jobber_expense_created ||
               integrationResult?.jobber_error ||
+              integrationResult?.jobber_expense_error ||
               integrationResult?.google_drive_uploaded ||
               integrationResult?.google_drive_error) && (
               <div className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
@@ -370,6 +371,11 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 {integrationResult?.jobber_error && (
                   <p className="mt-1 text-red-700 dark:text-red-300">
                     Jobber: {integrationResult.jobber_error}
+                  </p>
+                )}
+                {integrationResult?.jobber_expense_error && (
+                  <p className="mt-1 text-red-700 dark:text-red-300">
+                    Jobber expense: {integrationResult.jobber_expense_error}
                   </p>
                 )}
                 {integrationResult?.google_drive_uploaded && (

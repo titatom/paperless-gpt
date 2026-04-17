@@ -304,6 +304,7 @@ func TestGetDocumentsByTag(t *testing.T) {
 			Tags:          []string{"tag1", "tag2"},
 			Correspondent: "Alpha",
 			CreatedDate:   "1999-09-01",
+			CustomFields:  []CustomFieldResponse{},
 		},
 		{
 			ID:            2,
@@ -312,6 +313,7 @@ func TestGetDocumentsByTag(t *testing.T) {
 			Tags:          []string{"tag2", "tag3"},
 			Correspondent: "Beta",
 			CreatedDate:   "1999-09-02",
+			CustomFields:  []CustomFieldResponse{},
 		},
 	}
 
@@ -389,6 +391,7 @@ func TestGetDocumentsByTagWithEmoji(t *testing.T) {
 			Tags:          []string{"🤖 AI-Queue"},
 			Correspondent: "Alpha",
 			CreatedDate:   "2024-01-01",
+			CustomFields:  []CustomFieldResponse{},
 		},
 	}
 
