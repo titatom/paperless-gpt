@@ -681,23 +681,15 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 			finalCustomFields := slices.Clone(originalDoc.CustomFields)
 			originalCustomFieldsJSON, _ := json.Marshal(originalDoc.CustomFields)
 
-			switch document.CustomFieldsWriteMode {
+			writeMode := document.CustomFieldsWriteMode
+			if writeMode == "" {
+				writeMode = "update"
+			}
+			switch writeMode {
 			case "replace":
 				finalCustomFields = []CustomFieldResponse{}
 				for _, sf := range document.SuggestedCustomFields {
 					finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
-				}
-			case "update":
-				existingFieldsMap := make(map[int]*CustomFieldResponse)
-				for i := range finalCustomFields {
-					existingFieldsMap[finalCustomFields[i].Field] = &finalCustomFields[i]
-				}
-				for _, sf := range document.SuggestedCustomFields {
-					if ef, ok := existingFieldsMap[sf.ID]; ok {
-						ef.Value = sf.Value
-					} else {
-						finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
-					}
 				}
 			case "append":
 				existingFieldsMap := make(map[int]bool)
@@ -706,6 +698,18 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 				}
 				for _, sf := range document.SuggestedCustomFields {
 					if _, exists := existingFieldsMap[sf.ID]; !exists {
+						finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
+					}
+				}
+			default: // "update" or any unrecognized mode
+				existingFieldsMap := make(map[int]*CustomFieldResponse)
+				for i := range finalCustomFields {
+					existingFieldsMap[finalCustomFields[i].Field] = &finalCustomFields[i]
+				}
+				for _, sf := range document.SuggestedCustomFields {
+					if ef, ok := existingFieldsMap[sf.ID]; ok {
+						ef.Value = sf.Value
+					} else {
 						finalCustomFields = append(finalCustomFields, CustomFieldResponse{Field: sf.ID, Value: sf.Value})
 					}
 				}

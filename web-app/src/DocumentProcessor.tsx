@@ -78,6 +78,7 @@ export interface DocumentSuggestion {
   suggested_document_type?: string;
   suggested_created_date?: string;
   suggested_custom_fields?: CustomFieldSuggestion[];
+  custom_fields_write_mode?: string;
   jobber_candidates?: JobberMatchCandidate[];
   selected_jobber_match_id?: string;
   create_jobber_expense?: boolean;
@@ -494,7 +495,7 @@ const DocumentProcessor: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
               <p className="text-sm text-gray-500 dark:text-gray-400">Documents in queue</p>
               <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
@@ -505,12 +506,6 @@ const DocumentProcessor: React.FC = () => {
               <p className="text-sm text-gray-500 dark:text-gray-400">Selected</p>
               <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
                 {selectedDocuments.length}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Filter tag</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {filterTag || "No filter tag configured"}
               </p>
             </div>
           </div>

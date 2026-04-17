@@ -495,7 +495,7 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 		}
 		candidates = append(candidates, JobberMatchCandidate{
 			ID:         node.ID,
-			JobNumber:  fmt.Sprintf("#%d", node.JobNumber),
+			JobNumber:  fmt.Sprintf("%d", node.JobNumber),
 			ClientName: clientName,
 			JobName:    jobName,
 		})

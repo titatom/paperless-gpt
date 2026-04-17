@@ -5,6 +5,12 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    # Persist settings, database, and user accounts across container updates.
+    # Without these mounts, all configuration and user accounts will be lost
+    # when the container is recreated (e.g. after a Docker image update on Unraid).
+    volumes:
+      - ./config:/app/config
+      - ./db:/app/db
     # --- Security (recommended when exposed to the internet) ---
     #
     # Built-in user auth (recommended):
