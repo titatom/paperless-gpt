@@ -952,8 +952,7 @@ func (app *App) undoModificationHandler(c *gin.Context) {
 		suggestion.SuggestedTitle = modification.PreviousValue
 	case "tags":
 		var tags []string
-		err := json.Unmarshal([]byte(modification.PreviousValue), &tags)
-		if err != nil {
+		if err := json.Unmarshal([]byte(modification.PreviousValue), &tags); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unmarshal previous tags"})
 			log.Errorf("Failed to unmarshal previous tags: %v", err)
 			return
@@ -961,6 +960,12 @@ func (app *App) undoModificationHandler(c *gin.Context) {
 		suggestion.SuggestedTags = tags
 	case "content":
 		suggestion.SuggestedContent = modification.PreviousValue
+	case "correspondent":
+		suggestion.SuggestedCorrespondent = modification.PreviousValue
+	case "document_type":
+		suggestion.SuggestedDocumentType = modification.PreviousValue
+	case "created_date":
+		suggestion.SuggestedCreatedDate = modification.PreviousValue
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid modification field"})
 		log.Errorf("Invalid modification field: %v", modification.ModField)

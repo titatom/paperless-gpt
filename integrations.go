@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -425,6 +426,8 @@ func (s *IntegrationsService) ConsumeReceiptAccessToken(ctx context.Context, tok
 		_ = s.DB.WithContext(ctx).Delete(&record).Error
 		return nil, fmt.Errorf("receipt token expired")
 	}
+	// Delete the token after a successful read so it can only be used once.
+	_ = s.DB.WithContext(ctx).Delete(&record).Error
 	return &record, nil
 }
 
@@ -552,7 +555,7 @@ func (s *IntegrationsService) UploadDocumentToGoogleDrive(ctx context.Context, c
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", bodyReader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -736,15 +739,15 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 
 func buildMultipartDriveUpload(metadataJSON []byte, fileContent []byte, filename string) (io.Reader, string, error) {
 	boundary := "paperless-gpt-drive-upload"
-	body := &strings.Builder{}
-	body.WriteString("--" + boundary + "\r\n")
-	body.WriteString("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-	body.Write(metadataJSON)
-	body.WriteString("\r\n--" + boundary + "\r\n")
-	body.WriteString("Content-Type: application/octet-stream\r\n")
-	body.WriteString(fmt.Sprintf("Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n\r\n", filename))
-	content := body.String()
-	reader := io.MultiReader(strings.NewReader(content), strings.NewReader(string(fileContent)), strings.NewReader("\r\n--"+boundary+"--\r\n"))
+	var header bytes.Buffer
+	header.WriteString("--" + boundary + "\r\n")
+	header.WriteString("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+	header.Write(metadataJSON)
+	header.WriteString("\r\n--" + boundary + "\r\n")
+	header.WriteString("Content-Type: application/octet-stream\r\n")
+	header.WriteString(fmt.Sprintf("Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n\r\n", filename))
+	footer := []byte("\r\n--" + boundary + "--\r\n")
+	reader := io.MultiReader(&header, bytes.NewReader(fileContent), bytes.NewReader(footer))
 	return reader, "multipart/related; boundary=" + boundary, nil
 }
 
@@ -1105,9 +1108,8 @@ func newJobberProvider() jobberProvider {
 }
 
 func (p jobberProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {
-	validConn, err := p.ensureFreshToken(ctx, nil, conn)
-	if err != nil {
-		return nil, err
+	if conn == nil {
+		return nil, fmt.Errorf("jobber connection not found")
 	}
 	var response struct {
 		Data struct {
@@ -1116,10 +1118,15 @@ func (p jobberProvider) FetchIdentity(ctx context.Context, conn *IntegrationConn
 				Name string `json:"name"`
 			} `json:"account"`
 		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
-	err = executeJSONGraphQL(ctx, "https://api.getjobber.com/api/graphql", validConn.AccessToken, `query AccountIdentity { account { id name } }`, nil, &response)
-	if err != nil {
+	if err := executeJSONGraphQL(ctx, "https://api.getjobber.com/api/graphql", conn.AccessToken, `query AccountIdentity { account { id name } }`, nil, &response); err != nil {
 		return nil, err
+	}
+	if len(response.Errors) > 0 {
+		return nil, fmt.Errorf("jobber identity query error: %s", response.Errors[0].Message)
 	}
 	return &providerIdentity{
 		AccountID:   response.Data.Account.ID,
@@ -1172,15 +1179,14 @@ func newGoogleDriveProvider() googleDriveProvider {
 }
 
 func (p googleDriveProvider) FetchIdentity(ctx context.Context, conn *IntegrationConnection) (*providerIdentity, error) {
-	validConn, err := p.ensureFreshToken(ctx, nil, conn)
-	if err != nil {
-		return nil, err
+	if conn == nil {
+		return nil, fmt.Errorf("google drive connection not found")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo", nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+validConn.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+conn.AccessToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

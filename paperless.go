@@ -809,14 +809,14 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 						if err == nil {
 							defer tagResp.Body.Close()
 							if tagResp.StatusCode == http.StatusOK {
-								log.Infof("Document %d: Successfully removed auto/manual tag", documentID)
-								// Record this tag change with tag names for both PreviousValue and NewValue
-								mod := ModificationHistory{
-									DocumentID:    uint(documentID),
-									ModField:      "tags",
-									PreviousValue: fmt.Sprintf("%v", originalDoc.Tags),
-									NewValue:      fmt.Sprintf("%v", remainingTagNames),
-								}
+						log.Infof("Document %d: Successfully removed auto/manual tag", documentID)
+							// Record this tag change with tag names for both PreviousValue and NewValue
+							mod := ModificationHistory{
+								DocumentID:    uint(documentID),
+								ModField:      "tags",
+								PreviousValue: marshalModificationValue(originalDoc.Tags),
+								NewValue:      marshalModificationValue(remainingTagNames),
+							}
 								if err := InsertModification(db, &mod); err != nil {
 									log.Warnf("Error inserting tag modification record: %v", err)
 								}
@@ -838,11 +838,13 @@ func (client *PaperlessClient) UpdateDocuments(ctx context.Context, documents []
 				}
 			}
 			log.Printf("Document %d: Updated %s from %v to %v", documentID, field, value, updatedFields[field])
+			prevStr := marshalModificationValue(value)
+			newStr := marshalModificationValue(updatedFields[field])
 			mod := ModificationHistory{
 				DocumentID:    uint(documentID),
 				ModField:      field,
-				PreviousValue: fmt.Sprintf("%v", value),
-				NewValue:      fmt.Sprintf("%v", updatedFields[field]),
+				PreviousValue: prevStr,
+				NewValue:      newStr,
 			}
 			if err := InsertModification(db, &mod); err != nil {
 				return fmt.Errorf("error inserting modification record for document %d: %w", documentID, err)
@@ -1202,6 +1204,20 @@ func (client *PaperlessClient) GetCacheFolder() string {
 		client.CacheFolder = filepath.Join(os.TempDir(), "paperless-gpt")
 	}
 	return client.CacheFolder
+}
+
+// marshalModificationValue serializes a value for storage in ModificationHistory.
+// Slices and maps are JSON-encoded so they can be round-tripped; other values
+// fall back to fmt.Sprintf so existing string/int fields are unchanged.
+func marshalModificationValue(value interface{}) string {
+	switch v := value.(type) {
+	case []string, []int, map[string]interface{}:
+		b, err := json.Marshal(v)
+		if err == nil {
+			return string(b)
+		}
+	}
+	return fmt.Sprintf("%v", value)
 }
 
 // urlEncode encodes a string for safe URL usage

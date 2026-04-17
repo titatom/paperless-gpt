@@ -74,7 +74,7 @@ func InsertModification(db *gorm.DB, record *ModificationHistory) error {
 	log.Debugf("Passed modification record: %+v", record)
 	record.DateChanged = time.Now().Format(time.RFC3339) // Set the DateChanged field to the current time
 	log.Debugf("Inserting modification record: %+v", record)
-	result := db.Create(&record) // GORM's Create method
+	result := db.Create(record) // GORM's Create method
 	log.Debugf("Insertion result: %+v", result)
 	return result.Error
 }
