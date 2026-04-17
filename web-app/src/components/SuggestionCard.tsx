@@ -235,11 +235,10 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               Suggested Created Date
             </label>
             <input
-              type="text"
+              type="date"
               value={suggestion.suggested_created_date || ""}
               onChange={(e) => onCreatedDateChange(suggestion.id, e.target.value)}
               className="mt-2 w-full rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-              placeholder="Created Date"
             />
           </div>
 
