@@ -10,7 +10,6 @@ type OCRPageResult = {
   ocrLimitHit: boolean;
   generationInfo?: Record<string, unknown>;
 };
-type OCRCombinedResult = { combinedText: string; perPageResults: OCRPageResult[] };
 
 const isCancelError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") {
@@ -129,17 +128,8 @@ const ExperimentalOCR: React.FC = () => {
       }
 
       if (newJobStatus === 'completed') {
-        let parsedResult: OCRCombinedResult | null = null;
-        try {
-          parsedResult = JSON.parse(response.data.result);
-        } catch {
-          setOcrResult(response.data.result);
-          return;
-        }
-        if (parsedResult) {
-          setOcrResult(parsedResult.combinedText);
-          setPerPageResults(parsedResult.perPageResults);
-        }
+        setOcrResult(response.data.result ?? '');
+        await fetchPerPageResults();
       } else if (newJobStatus === 'failed') {
         setError(response.data.error);
       } else {
@@ -235,9 +225,8 @@ const ExperimentalOCR: React.FC = () => {
 
     try {
       await axios.delete(`./api/documents/${documentId}/ocr_pages/${pageIdx}/reocr`);
-      console.log(`Cancellation request sent for page ${pageIdx}`);
-    } catch (err) {
-      console.error(`Failed to send cancellation request for page ${pageIdx}:`, err);
+    } catch {
+      // Cancellation request failed silently; the server-side cancel may still succeed
     }
   };
 
@@ -322,7 +311,7 @@ const ExperimentalOCR: React.FC = () => {
             {message}
           </div>
         )}
-        {perPageResults.length > 0 && totalPages && totalPages > 1 && (
+        {perPageResults.length > 0 && (
           <div className="mt-6">
             <h2 className="text-2xl font-bold mb-4">Per-Page OCR Results:</h2>
             {perPageResults.map((page, idx) => (

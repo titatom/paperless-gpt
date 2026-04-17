@@ -36,9 +36,28 @@ const AppShell: React.FC = () => {
     void fetchVersion();
   }, []);
 
-  // Keep the base path and remove the app path.
-  const rawBasename = window.location.pathname.replace(/(\/[^/]+)$/, '/');
-  const basename = rawBasename === '/' ? '' : rawBasename;
+  // Derive the router basename from the HTML <base> element when set by the
+  // server (e.g. when hosted under a sub-path). Fall back to stripping only
+  // the known top-level page segments so deep nesting doesn't corrupt it.
+  const knownRoutes = ['/', '/adhoc-analysis', '/experimental-ocr', '/history', '/settings'];
+  const deriveBasename = (): string => {
+    const base = document.querySelector('base');
+    if (base?.href) {
+      try {
+        return new URL(base.href).pathname.replace(/\/$/, '');
+      } catch {
+        // ignore malformed base href
+      }
+    }
+    const path = window.location.pathname;
+    for (const route of knownRoutes) {
+      if (path === route || path.endsWith(route)) {
+        return path.slice(0, path.length - route.length);
+      }
+    }
+    return '';
+  };
+  const basename = deriveBasename();
 
   if (loading) {
     return (
@@ -62,7 +81,7 @@ const AppShell: React.FC = () => {
     <Router basename={basename}>
       <div className="flex h-screen flex-col">
         <div className="flex flex-1 overflow-hidden">
-          <Sidebar onSelectPage={(page) => console.log(page)} />
+          <Sidebar onSelectPage={() => undefined} />
           <div className="flex flex-1 flex-col overflow-y-auto bg-gray-50 dark:bg-gray-950">
             <div className="flex-1">
               <Routes>

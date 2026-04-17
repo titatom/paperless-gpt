@@ -149,6 +149,14 @@ func (app *App) ProcessDocumentOCR(ctx context.Context, documentID int, options 
 		// Store the PDF data in the outer variable
 		originalPDFData = pdfBytes
 
+		if jobID != "" {
+			jobStore.Lock()
+			if job, exists := jobStore.jobs[jobID]; exists {
+				job.TotalPages = totalPdfPages
+			}
+			jobStore.Unlock()
+		}
+
 		docLogger.WithFields(logrus.Fields{
 			"pdf_size":         len(originalPDFData),
 			"total_page_count": totalPdfPages,
@@ -170,6 +178,10 @@ func (app *App) ProcessDocumentOCR(ctx context.Context, documentID int, options 
 			Debug("OCR completed for full document")
 
 		ocrTexts = append(ocrTexts, result.Text)
+
+		if jobID != "" {
+			jobStore.updatePagesDone(jobID, 1)
+		}
 	} else if processMode == "pdf" {
 		// Process PDF pages individually
 		pdfPaths, pdfData, pdfPageCount, err := app.Client.DownloadDocumentAsPDF(ctx, documentID, pageLimit, true)
@@ -227,6 +239,10 @@ func (app *App) ProcessDocumentOCR(ctx context.Context, documentID int, options 
 				Debug("OCR completed for page")
 
 			ocrTexts = append(ocrTexts, result.Text)
+
+			if jobID != "" {
+				jobStore.updatePagesDone(jobID, i+1)
+			}
 		}
 	} else {
 		// Process pages as images

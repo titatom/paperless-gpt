@@ -67,6 +67,9 @@ func (app *App) getSuggestedCorrespondent(ctx context.Context, content string, s
 	if err != nil {
 		return "", fmt.Errorf("error getting response from LLM: %v", err)
 	}
+	if len(completion.Choices) == 0 {
+		return "", fmt.Errorf("LLM returned no choices for correspondent suggestion")
+	}
 
 	response := stripReasoning(strings.TrimSpace(completion.Choices[0].Content))
 	return response, nil
@@ -142,6 +145,9 @@ func (app *App) getSuggestedTags(
 	if err != nil {
 		logger.Errorf("Error getting response from LLM: %v", err)
 		return nil, fmt.Errorf("error getting response from LLM: %v", err)
+	}
+	if len(completion.Choices) == 0 {
+		return nil, fmt.Errorf("LLM returned no choices for tag suggestion")
 	}
 
 	response := stripReasoning(completion.Choices[0].Content)
@@ -251,6 +257,9 @@ func (app *App) getSuggestedDocumentType(
 		logger.Errorf("Error getting response from LLM: %v", err)
 		return "", fmt.Errorf("error getting response from LLM: %v", err)
 	}
+	if len(completion.Choices) == 0 {
+		return "", fmt.Errorf("LLM returned no choices for document type suggestion")
+	}
 
 	response := strings.TrimSpace(stripReasoning(completion.Choices[0].Content))
 
@@ -320,6 +329,9 @@ func (app *App) getSuggestedTitle(ctx context.Context, content string, originalT
 	if err != nil {
 		return "", fmt.Errorf("error getting response from LLM: %v", err)
 	}
+	if len(completion.Choices) == 0 {
+		return "", fmt.Errorf("LLM returned no choices for title suggestion")
+	}
 	result := stripReasoning(completion.Choices[0].Content)
 	return strings.TrimSpace(strings.Trim(result, "\"")), nil
 }
@@ -375,6 +387,9 @@ func (app *App) getSuggestedCreatedDate(ctx context.Context, content string, log
 	})
 	if err != nil {
 		return "", fmt.Errorf("error getting response from LLM: %v", err)
+	}
+	if len(completion.Choices) == 0 {
+		return "", fmt.Errorf("LLM returned no choices for created date suggestion")
 	}
 	result := stripReasoning(completion.Choices[0].Content)
 	return strings.TrimSpace(strings.Trim(result, "\"")), nil
@@ -454,6 +469,9 @@ func (app *App) getSuggestedCustomFields(ctx context.Context, doc Document, sele
 	if err != nil {
 		return nil, fmt.Errorf("error getting response from LLM for custom fields: %v", err)
 	}
+	if len(completion.Choices) == 0 {
+		return nil, fmt.Errorf("LLM returned no choices for custom field suggestion")
+	}
 
 	response := stripReasoning(completion.Choices[0].Content)
 	response = stripMarkdown(response)
@@ -474,7 +492,7 @@ func (app *App) getSuggestedCustomFields(ctx context.Context, doc Document, sele
 	err = json.Unmarshal([]byte(response), &llmSuggestedFields)
 	if err != nil {
 		logger.Errorf("Error unmarshalling custom fields JSON from LLM response: %v. Response: %s", err, response)
-		return []CustomFieldSuggestion{}, nil // Return empty slice on parsing error
+		return nil, fmt.Errorf("LLM returned invalid JSON for custom fields: %w", err)
 	}
 
 	// Map field names back to IDs
@@ -746,10 +764,13 @@ func stripReasoning(content string) string {
 
 // stripMarkdown removes the markdown code block from the content.
 func stripMarkdown(content string) string {
-	// Remove markdown code block
-	if strings.HasPrefix(content, "```json") {
-		content = strings.TrimPrefix(content, "```json")
-		content = strings.TrimSuffix(content, "```")
+	trimmed := strings.TrimSpace(content)
+	// Strip ```json or plain ``` fences
+	if strings.HasPrefix(trimmed, "```json") {
+		trimmed = strings.TrimPrefix(trimmed, "```json")
+	} else if strings.HasPrefix(trimmed, "```") {
+		trimmed = strings.TrimPrefix(trimmed, "```")
 	}
-	return strings.TrimSpace(content)
+	trimmed = strings.TrimSuffix(trimmed, "```")
+	return strings.TrimSpace(trimmed)
 }

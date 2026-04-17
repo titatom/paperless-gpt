@@ -118,13 +118,22 @@ func (store *JobStore) evictOldJobs() {
 	}
 }
 
-func startWorkerPool(app *App, numWorkers int) {
+func startWorkerPool(app *App, numWorkers int, serverCtx context.Context) {
 	for i := 0; i < numWorkers; i++ {
 		go func(workerID int) {
 			log.Infof("Worker %d started", workerID)
-			for job := range jobQueue {
-				log.Infof("Worker %d processing job: %s", workerID, job.ID)
-				processJob(app, job)
+			for {
+				select {
+				case <-serverCtx.Done():
+					log.Infof("Worker %d shutting down", workerID)
+					return
+				case job, ok := <-jobQueue:
+					if !ok {
+						return
+					}
+					log.Infof("Worker %d processing job: %s", workerID, job.ID)
+					processJob(app, job, serverCtx)
+				}
 			}
 		}(i)
 	}
@@ -133,16 +142,21 @@ func startWorkerPool(app *App, numWorkers int) {
 	go func() {
 		ticker := time.NewTicker(30 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			jobStore.evictOldJobs()
+		for {
+			select {
+			case <-serverCtx.Done():
+				return
+			case <-ticker.C:
+				jobStore.evictOldJobs()
+			}
 		}
 	}()
 }
 
-func processJob(app *App, job *Job) {
+func processJob(app *App, job *Job, serverCtx context.Context) {
 	jobStore.updateJobStatus(job.ID, "in_progress", "")
 
-	jobCtx, cancel := context.WithCancel(context.Background())
+	jobCtx, cancel := context.WithCancel(serverCtx)
 	jobCancellersMu.Lock()
 	jobCancellers[job.ID] = cancel
 	jobCancellersMu.Unlock()
