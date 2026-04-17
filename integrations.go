@@ -376,9 +376,11 @@ type JobberExpenseCreateResult struct {
 }
 
 type ReceiptAccessToken struct {
-	Token      string
-	DocumentID int
-	ExpiresAt  time.Time
+	ID         uint      `gorm:"primaryKey"`
+	Token      string    `gorm:"uniqueIndex;size:255;not null"`
+	DocumentID int       `gorm:"index;not null"`
+	ExpiresAt  time.Time `gorm:"index;not null"`
+	CreatedAt  time.Time
 }
 
 func NewIntegrationsService(db *gorm.DB) *IntegrationsService {

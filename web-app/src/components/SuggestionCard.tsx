@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import ArrowTopRightOnSquareIcon from "@heroicons/react/24/outline/ArrowTopRightOnSquareIcon";
 import EyeIcon from "@heroicons/react/24/outline/EyeIcon";
 import TrashIcon from "@heroicons/react/24/outline/TrashIcon";
@@ -47,7 +47,10 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const sortedAvailableTags = [...availableTags].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedAvailableTags = useMemo(
+    () => [...availableTags].sort((a, b) => a.name.localeCompare(b.name)),
+    [availableTags]
+  );
   const document = suggestion.original_document;
 
   const handleDeleteClick = () => {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { DocumentSuggestion, DocumentIntegrationResult, IntegrationStatus, TagOption } from "../DocumentProcessor";
 import SuggestionCard from "./SuggestionCard";
 
@@ -44,7 +44,13 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
   updating,
   paperlessUrl,
   onDeleteDocument,
-}) => (
+}) => {
+  const integrationResultMap = useMemo(
+    () => new Map(integrationResults.map((r) => [r.document_id, r])),
+    [integrationResults]
+  );
+
+  return (
   <section className="suggestions-review">
     <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -95,7 +101,7 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
           onGoogleDriveToggle={onGoogleDriveToggle}
           jobberConnected={!!integrationStatuses.jobber?.connected}
           googleDriveConnected={!!integrationStatuses.google_drive?.connected}
-          integrationResult={integrationResults.find((result) => result.document_id === doc.id)}
+          integrationResult={integrationResultMap.get(doc.id)}
           paperlessUrl={paperlessUrl}
           onDelete={onDeleteDocument}
         />
@@ -128,6 +134,7 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
       </div>
     </div>
   </section>
-);
+  );
+};
 
 export default SuggestionsReview;

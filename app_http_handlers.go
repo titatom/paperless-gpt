@@ -16,6 +16,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 )
 
 // getPromptsHandler handles the GET /api/prompts endpoint
@@ -109,9 +110,9 @@ func (app *App) getAllTagsHandler(c *gin.Context) {
 
 // getSettingsHandler handles the GET /api/settings endpoint
 func (app *App) getSettingsHandler(c *gin.Context) {
-	// Refresh the custom fields cache synchronously so the response contains
-	// fresh data rather than whatever was last cached.
-	refreshCustomFieldsCache(app.Client)
+	// Trigger a background refresh so the next request sees fresher data,
+	// but serve the current cached snapshot immediately to avoid blocking.
+	go refreshCustomFieldsCache(app.Client)
 
 	settingsMutex.RLock()
 	defer settingsMutex.RUnlock()
@@ -482,21 +483,41 @@ func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 		return
 	}
 
-	results := make(map[int][]JobberMatchCandidate, len(req.DocumentIDs))
+	type entry struct {
+		id         int
+		candidates []JobberMatchCandidate
+	}
+
+	ctx := c.Request.Context()
+	eg, egCtx := errgroup.WithContext(ctx)
+	ch := make(chan entry, len(req.DocumentIDs))
+
 	for _, documentID := range req.DocumentIDs {
-		document, err := app.Client.GetDocument(c.Request.Context(), documentID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error fetching document %d: %v", documentID, err)})
-			return
-		}
+		documentID := documentID
+		eg.Go(func() error {
+			document, err := app.Client.GetDocument(egCtx, documentID)
+			if err != nil {
+				return fmt.Errorf("error fetching document %d: %w", documentID, err)
+			}
+			candidates, err := app.Integrations.GetJobberCandidates(egCtx, document)
+			if err != nil {
+				return fmt.Errorf("error fetching Jobber candidates for document %d: %w", documentID, err)
+			}
+			ch <- entry{id: documentID, candidates: candidates}
+			return nil
+		})
+	}
 
-		candidates, err := app.Integrations.GetJobberCandidates(c.Request.Context(), document)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error fetching Jobber candidates for document %d: %v", documentID, err)})
-			return
-		}
+	if err := eg.Wait(); err != nil {
+		close(ch)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	close(ch)
 
-		results[documentID] = candidates
+	results := make(map[int][]JobberMatchCandidate, len(req.DocumentIDs))
+	for e := range ch {
+		results[e.id] = e.candidates
 	}
 
 	c.JSON(http.StatusOK, gin.H{"candidates": results})

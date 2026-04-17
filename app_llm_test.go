@@ -533,10 +533,11 @@ func TestGetSuggestedCustomFields(t *testing.T) {
 		Content: "The invoice number is INV-12345 and the due date is 2025-12-31.",
 	}
 	selectedFieldIDs := []int{1, 2} // User has selected "Invoice Number" and "Due Date"
+	allCustomFields := mockClient.CustomFields
 
 	// 3. Execute
 	testLogger := logrus.WithField("test", "TestGetSuggestedCustomFields")
-	suggestions, err := app.getSuggestedCustomFields(context.Background(), doc, selectedFieldIDs, testLogger)
+	suggestions, err := app.getSuggestedCustomFields(context.Background(), doc, selectedFieldIDs, allCustomFields, testLogger)
 
 	// 4. Assert
 	require.NoError(t, err)

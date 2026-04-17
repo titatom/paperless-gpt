@@ -21,7 +21,7 @@ const PromptsEditor: React.FC = () => {
       .then((data) => {
         setPrompts(data);
         const first = Object.keys(data).sort()[0];
-        if (first && !selectedPrompt) setSelectedPrompt(first);
+        if (first) setSelectedPrompt((prev) => prev || first);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -29,7 +29,8 @@ const PromptsEditor: React.FC = () => {
         setIsLoading(false);
       });
     return () => controller.abort();
-  }, [selectedPrompt]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedPromptContent = useMemo(
     () => (selectedPrompt && prompts[selectedPrompt] ? prompts[selectedPrompt] : ''),
