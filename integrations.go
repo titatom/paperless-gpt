@@ -28,6 +28,11 @@ const (
 
 	integrationStatusConnected    = "connected"
 	integrationStatusDisconnected = "disconnected"
+
+	// jobberGraphQLVersion is the Jobber GraphQL API version sent in every
+	// request via the X-JOBBER-GRAPHQL-VERSION header, which is required by
+	// Jobber for all apps.
+	jobberGraphQLVersion = "2025-04-16"
 )
 
 const (
@@ -981,6 +986,7 @@ func executeJSONGraphQL(ctx context.Context, endpoint, accessToken, query string
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JOBBER-GRAPHQL-VERSION", jobberGraphQLVersion)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
