@@ -309,6 +309,15 @@ func (client *PaperlessClient) GetDocumentsByTag(ctx context.Context, tag string
 		return nil, err
 	}
 
+	allCustomFields, err := client.GetCustomFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+	customFieldMap := make(map[int]string, len(allCustomFields))
+	for _, field := range allCustomFields {
+		customFieldMap[field.ID] = field.Name
+	}
+
 	// Build reverse maps (ID → name) once for all documents.
 	tagIDToName := make(map[int]string, len(allTags))
 	for name, id := range allTags {
@@ -326,6 +335,14 @@ func (client *PaperlessClient) GetDocumentsByTag(ctx context.Context, tag string
 			tagNames[i] = tagIDToName[resultTagID]
 		}
 
+		customFields := make([]CustomFieldResponse, len(result.CustomFields))
+		copy(customFields, result.CustomFields)
+		for i, cf := range customFields {
+			if name, ok := customFieldMap[cf.Field]; ok {
+				customFields[i].Name = name
+			}
+		}
+
 		documents = append(documents, Document{
 			ID:               result.ID,
 			Title:            result.Title,
@@ -335,6 +352,7 @@ func (client *PaperlessClient) GetDocumentsByTag(ctx context.Context, tag string
 			CreatedDate:      result.CreatedDate,
 			OriginalFileName: result.OriginalFileName,
 			ArchivedFileName: result.ArchivedFileName,
+			CustomFields:     customFields,
 		})
 	}
 

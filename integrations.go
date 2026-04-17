@@ -643,15 +643,18 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 
 	totalValue, hasTotal := deriveJobberExpenseTotal(suggestion, totalFieldRef)
 
-	receiptToken, err := s.IssueReceiptAccessToken(ctx, suggestion.ID, 30*time.Minute)
-	if err != nil {
-		return nil, err
-	}
+	receiptURL := ""
 	baseURL := configuredPublicBaseURL()
-	if baseURL == "" {
-		return nil, fmt.Errorf("APP_PUBLIC_URL or PAPERLESS_GPT_PUBLIC_URL is required for Jobber receipt attachment")
+	if baseURL != "" {
+		receiptToken, err := s.IssueReceiptAccessToken(ctx, suggestion.ID, 30*time.Minute)
+		if err != nil {
+			log.WithError(err).Warnf("failed to issue receipt access token for document %d; expense will be created without receipt attachment", suggestion.ID)
+		} else {
+			receiptURL = baseURL + "/api/integrations/jobber/receipt/" + url.PathEscape(receiptToken.Token)
+		}
+	} else {
+		log.Warnf("APP_PUBLIC_URL / PAPERLESS_GPT_PUBLIC_URL is not set; Jobber expense for document %d will be created without receipt attachment", suggestion.ID)
 	}
-	receiptURL := baseURL + "/api/integrations/jobber/receipt/" + url.PathEscape(receiptToken.Token)
 
 	input := map[string]interface{}{
 		"title":       title,

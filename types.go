@@ -32,8 +32,9 @@ type GetDocumentApiResponseResult struct {
 	// Modified            time.Time     `json:"modified"`
 	// Added               time.Time     `json:"added"`
 	// ArchiveSerialNumber interface{}   `json:"archive_serial_number"`
-	OriginalFileName string `json:"original_file_name"`
-	ArchivedFileName string `json:"archived_file_name"`
+	OriginalFileName string               `json:"original_file_name"`
+	ArchivedFileName string               `json:"archived_file_name"`
+	CustomFields     []CustomFieldResponse `json:"custom_fields"`
 	// Owner               int           `json:"owner"`
 	// UserCanChange       bool          `json:"user_can_change"`
 	Notes []interface{} `json:"notes"`

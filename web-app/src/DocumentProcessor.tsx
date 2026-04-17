@@ -7,6 +7,12 @@ import ArrowPathIcon from "@heroicons/react/24/outline/ArrowPathIcon";
 import SuccessModal from "./components/SuccessModal";
 import SuggestionsReview from "./components/SuggestionsReview";
 
+export interface DocumentCustomField {
+  field: number;
+  value: unknown;
+  name?: string;
+}
+
 export interface Document {
   id: number;
   title: string;
@@ -17,6 +23,7 @@ export interface Document {
   original_file_name?: string;
   archived_file_name?: string;
   document_type_name?: string;
+  custom_fields?: DocumentCustomField[];
 }
 
 export interface GenerateSuggestionsRequest {

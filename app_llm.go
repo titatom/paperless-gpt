@@ -337,7 +337,7 @@ func (app *App) getSuggestedTitle(ctx context.Context, content string, originalT
 }
 
 // getSuggestedCreatedDate generates a suggested createdDate for a document using the LLM
-func (app *App) getSuggestedCreatedDate(ctx context.Context, content string, logger *logrus.Entry) (string, error) {
+func (app *App) getSuggestedCreatedDate(ctx context.Context, title string, content string, logger *logrus.Entry) (string, error) {
 	likelyLanguage := getLikelyLanguage()
 
 	templateMutex.RLock()
@@ -346,6 +346,7 @@ func (app *App) getSuggestedCreatedDate(ctx context.Context, content string, log
 	// Get available tokens for content
 	templateData := map[string]interface{}{
 		"Language": likelyLanguage,
+		"Title":    title,
 		"Content":  content,
 		"Today":    getTodayDate(), // must be in YYYY-MM-DD format
 	}
@@ -643,7 +644,7 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 			}
 
 			if suggestionRequest.GenerateCreatedDate {
-				suggestedCreatedDate, gerr = app.getSuggestedCreatedDate(ctx, content, docLogger)
+				suggestedCreatedDate, gerr = app.getSuggestedCreatedDate(ctx, suggestedTitle, content, docLogger)
 				if gerr != nil {
 					mu.Lock()
 					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))

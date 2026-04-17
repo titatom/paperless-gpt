@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface CustomField {
   id: number;
@@ -390,54 +390,76 @@ const IntegrationsEditor: React.FC = () => {
           connecting={connectingProvider === 'jobber'}
           disconnecting={disconnectingProvider === 'jobber'}
         >
-          <div className="flex items-center mb-4">
+          {/* ── Job matching ───────────────────────────────────────────── */}
+          <SectionHeader
+            title="Job matching"
+            description="When you approve a document, the selected Jobber job's details are written back into Paperless-ngx custom fields. Map each Jobber value to the Paperless custom field where you want it stored."
+          />
+
+          <div className="flex items-center gap-2 mb-4">
             <input
               type="checkbox"
               id="jobberEnabled"
               checked={settings.jobber_enabled}
               onChange={(e) => handleSettingChange('jobber_enabled', e.target.checked)}
-              className="w-4 h-4 mr-2"
+              className="w-4 h-4"
             />
-            <label htmlFor="jobberEnabled">Enable Jobber matching</label>
+            <label htmlFor="jobberEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Enable Jobber job matching
+            </label>
           </div>
 
-          <fieldset disabled={!settings.jobber_enabled} className="grid grid-cols-1 md:grid-cols-2 gap-4 disabled:opacity-50">
+          <CustomFieldsInfoBanner customFields={customFields} />
+
+          <fieldset disabled={!settings.jobber_enabled} className="grid grid-cols-1 md:grid-cols-2 gap-4 disabled:opacity-50 mt-2">
             <FieldMappingSelect
-              label="Job ID field"
+              label="Job ID"
+              tooltip="The internal Jobber job ID. Useful for cross-referencing or automations that need a stable identifier."
               value={settings.jobber_job_id_field_id}
               options={customFieldOptions}
               onChange={(value) => handleSettingChange('jobber_job_id_field_id', value)}
             />
             <FieldMappingSelect
-              label="Job # field"
+              label="Job number"
+              tooltip="The human-readable job number shown in Jobber (e.g. #1107). Handy for quick visual lookup."
               value={settings.jobber_job_number_field_id}
               options={customFieldOptions}
               onChange={(value) => handleSettingChange('jobber_job_number_field_id', value)}
             />
             <FieldMappingSelect
-              label="Client field"
+              label="Client name"
+              tooltip="The client or company name associated with the Jobber job."
               value={settings.jobber_client_field_id}
               options={customFieldOptions}
               onChange={(value) => handleSettingChange('jobber_client_field_id', value)}
             />
             <FieldMappingSelect
-              label="Job name field"
+              label="Job name"
+              tooltip="The title of the Jobber job (e.g. 'Bathroom renovation – Phase 2')."
               value={settings.jobber_job_name_field_id}
               options={customFieldOptions}
               onChange={(value) => handleSettingChange('jobber_job_name_field_id', value)}
             />
           </fieldset>
 
-          <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div className="flex items-center mb-4">
+          {/* ── Expense creation ───────────────────────────────────────── */}
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-5">
+            <SectionHeader
+              title="Expense creation"
+              description="When a document is approved with a Jobber job selected, an expense can be automatically created in Jobber. Choose which Paperless field to use as the source for each expense field."
+            />
+
+            <div className="flex items-center gap-2 mb-4">
               <input
                 type="checkbox"
                 id="jobberExpenseEnabled"
                 checked={settings.jobber_expense_enabled}
                 onChange={(e) => handleSettingChange('jobber_expense_enabled', e.target.checked)}
-                className="w-4 h-4 mr-2"
+                className="w-4 h-4"
               />
-              <label htmlFor="jobberExpenseEnabled">Enable Jobber expense creation</label>
+              <label htmlFor="jobberExpenseEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Enable expense creation
+              </label>
             </div>
 
             <fieldset
@@ -445,33 +467,38 @@ const IntegrationsEditor: React.FC = () => {
               className="grid grid-cols-1 md:grid-cols-2 gap-4 disabled:opacity-50"
             >
               <FieldReferenceSelect
-                label="Expense title field"
+                label="Expense title"
+                tooltip="The name shown on the expense in Jobber. Defaults to the document title when not mapped."
                 value={settings.jobber_expense_title_field_ref}
                 options={expenseFieldOptions}
+                customFields={customFields}
                 onChange={(value) => handleSettingChange('jobber_expense_title_field_ref', value)}
               />
               <FieldReferenceSelect
-                label="Expense description field"
+                label="Expense description"
+                tooltip="Optional longer note on the expense. Defaults to a summary of the vendor and document type."
                 value={settings.jobber_expense_description_field_ref}
                 options={expenseFieldOptions}
+                customFields={customFields}
                 onChange={(value) => handleSettingChange('jobber_expense_description_field_ref', value)}
               />
               <FieldReferenceSelect
-                label="Expense date field"
+                label="Expense date"
+                tooltip="The date of the expense in Jobber. Defaults to the document's created date."
                 value={settings.jobber_expense_date_field_ref}
                 options={expenseFieldOptions}
+                customFields={customFields}
                 onChange={(value) => handleSettingChange('jobber_expense_date_field_ref', value)}
               />
               <FieldReferenceSelect
-                label="Expense total field"
+                label="Expense total"
+                tooltip="The monetary amount of the expense. Currency symbols and commas are stripped automatically. Defaults to scanning custom fields whose name contains 'total' or 'amount'."
                 value={settings.jobber_expense_total_field_ref}
                 options={expenseFieldOptions}
+                customFields={customFields}
                 onChange={(value) => handleSettingChange('jobber_expense_total_field_ref', value)}
               />
             </fieldset>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              On approval, a matched receipt can create a Jobber expense linked to the selected job using mapped built-in Paperless fields or custom fields when available.
-            </p>
           </div>
         </IntegrationCard>
 
@@ -615,20 +642,102 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
   );
 };
 
+// ── Tooltip ────────────────────────────────────────────────────────────────
+
+interface TooltipProps {
+  text: string;
+}
+
+const Tooltip: React.FC<TooltipProps> = ({ text }) => {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  return (
+    <span className="relative inline-flex items-center ml-1.5" ref={ref}>
+      <button
+        type="button"
+        aria-label="More information"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus:outline-none"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {visible && (
+        <span
+          role="tooltip"
+          className="absolute z-20 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-gray-800 text-white text-xs leading-relaxed px-3 py-2 shadow-lg pointer-events-none"
+        >
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+        </span>
+      )}
+    </span>
+  );
+};
+
+// ── Section header ──────────────────────────────────────────────────────────
+
+interface SectionHeaderProps {
+  title: string;
+  description: string;
+}
+
+const SectionHeader: React.FC<SectionHeaderProps> = ({ title, description }) => (
+  <div className="mb-4">
+    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{title}</h3>
+    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>
+  </div>
+);
+
+// ── Custom-fields prerequisite info banner ──────────────────────────────────
+
+interface CustomFieldsInfoBannerProps {
+  customFields: CustomField[];
+}
+
+const CustomFieldsInfoBanner: React.FC<CustomFieldsInfoBannerProps> = ({ customFields }) => {
+  if (customFields.length > 0) return null;
+  return (
+    <div className="mb-4 flex gap-2.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+      <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+      </svg>
+      <span>
+        No custom fields found in Paperless-ngx. To use field mapping, first create your custom fields in{' '}
+        <strong>Paperless-ngx → Settings → Custom Fields</strong>, then reload this page.
+      </span>
+    </div>
+  );
+};
+
+// ── FieldMappingSelect ──────────────────────────────────────────────────────
+
 interface FieldMappingSelectProps {
   label: string;
+  tooltip: string;
   value: number;
   options: Array<{ id: number; name: string }>;
   onChange: (value: number) => void;
 }
 
-const FieldMappingSelect: React.FC<FieldMappingSelectProps> = ({ label, value, options, onChange }) => (
+const FieldMappingSelect: React.FC<FieldMappingSelectProps> = ({ label, tooltip, value, options, onChange }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+    <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
+      {label}
+      <Tooltip text={tooltip} />
+    </label>
+    <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+      Jobber → Paperless custom field
+    </p>
     <select
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+      className="mt-1.5 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
     >
       {options.map((option) => (
         <option key={option.id} value={option.id}>
@@ -639,29 +748,53 @@ const FieldMappingSelect: React.FC<FieldMappingSelectProps> = ({ label, value, o
   </div>
 );
 
+// ── FieldReferenceSelect ────────────────────────────────────────────────────
+
 interface FieldReferenceSelectProps {
   label: string;
+  tooltip: string;
   value: string;
   options: FieldOption[];
+  customFields: CustomField[];
   onChange: (value: string) => void;
 }
 
-const FieldReferenceSelect: React.FC<FieldReferenceSelectProps> = ({ label, value, options, onChange }) => (
-  <div>
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </div>
-);
+const FieldReferenceSelect: React.FC<FieldReferenceSelectProps> = ({ label, tooltip, value, options, customFields, onChange }) => {
+  const builtIn = options.filter((o) => o.value === '' || builtInPaperlessFieldOptions.some((b) => b.value === o.value));
+  const custom = customFields.map((f) => ({ value: `${CUSTOM_FIELD_REF_PREFIX}${f.id}`, label: f.name }));
+
+  return (
+    <div>
+      <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
+        {label}
+        <Tooltip text={tooltip} />
+      </label>
+      <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+        Paperless field → Jobber expense
+      </p>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1.5 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+      >
+        {builtIn.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+        {custom.length > 0 && (
+          <optgroup label="Custom fields">
+            {custom.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+    </div>
+  );
+};
 
 function prettyProviderName(provider: string): string {
   switch (provider) {

@@ -235,11 +235,10 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               Suggested Created Date
             </label>
             <input
-              type="text"
+              type="date"
               value={suggestion.suggested_created_date || ""}
               onChange={(e) => onCreatedDateChange(suggestion.id, e.target.value)}
               className="mt-2 w-full rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-              placeholder="Created Date"
             />
           </div>
 
@@ -350,6 +349,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             {(integrationResult?.jobber_applied ||
               integrationResult?.jobber_expense_created ||
               integrationResult?.jobber_error ||
+              integrationResult?.jobber_expense_error ||
               integrationResult?.google_drive_uploaded ||
               integrationResult?.google_drive_error) && (
               <div className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
@@ -370,6 +370,11 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 {integrationResult?.jobber_error && (
                   <p className="mt-1 text-red-700 dark:text-red-300">
                     Jobber: {integrationResult.jobber_error}
+                  </p>
+                )}
+                {integrationResult?.jobber_expense_error && (
+                  <p className="mt-1 text-red-700 dark:text-red-300">
+                    Jobber expense: {integrationResult.jobber_expense_error}
                   </p>
                 )}
                 {integrationResult?.google_drive_uploaded && (
