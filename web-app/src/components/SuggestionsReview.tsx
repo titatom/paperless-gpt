@@ -22,6 +22,8 @@ interface SuggestionsReviewProps {
   updating: boolean;
   paperlessUrl?: string;
   onDeleteDocument?: (documentId: number) => void;
+  jobberEnabled?: boolean;
+  jobberExpenseEnabled?: boolean;
 }
 
 const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
@@ -44,6 +46,8 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
   updating,
   paperlessUrl,
   onDeleteDocument,
+  jobberEnabled = true,
+  jobberExpenseEnabled = true,
 }) => {
   const integrationResultMap = useMemo(
     () => new Map(integrationResults.map((r) => [r.document_id, r])),
@@ -99,7 +103,8 @@ const SuggestionsReview: React.FC<SuggestionsReviewProps> = ({
           onJobberMatchChange={onJobberMatchChange}
           onJobberExpenseToggle={onJobberExpenseToggle}
           onGoogleDriveToggle={onGoogleDriveToggle}
-          jobberConnected={!!integrationStatuses.jobber?.connected}
+          jobberConnected={!!integrationStatuses.jobber?.connected && jobberEnabled}
+          jobberExpenseEnabled={jobberExpenseEnabled}
           googleDriveConnected={!!integrationStatuses.google_drive?.connected}
           integrationResult={integrationResultMap.get(doc.id)}
           paperlessUrl={paperlessUrl}

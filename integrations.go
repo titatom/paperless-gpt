@@ -433,6 +433,13 @@ func (s *IntegrationsService) ConsumeReceiptAccessToken(ctx context.Context, tok
 	return &record, nil
 }
 
+// jobberCandidatePageSize is the number of jobs fetched per Jobber API page.
+const jobberCandidatePageSize = 100
+
+// jobberCandidateMaxJobs is the upper bound on total Jobber jobs fetched to avoid
+// very large accounts causing excessive API calls (100 jobs/page × 5 pages = 500 max).
+const jobberCandidateMaxJobs = 500
+
 func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document Document) ([]JobberMatchCandidate, error) {
 	conn, err := getOptionalConnectionByProvider(s.DB.WithContext(ctx), integrationProviderJobber)
 	if err != nil {
@@ -448,48 +455,88 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 		return nil, err
 	}
 
-	query := `query JobCandidates {
-  jobs(first: 25) {
-    nodes {
-      id
-      jobNumber
-      title
-      client {
-        name
-        companyName
+	// Fetch jobs with cursor-based pagination until we have enough candidates or
+	// there are no more pages. We query all non-cancelled statuses so that
+	// historical receipts can be matched against completed jobs too.
+	type jobNode struct {
+		ID        string `json:"id"`
+		JobNumber int    `json:"jobNumber"`
+		Title     string `json:"title"`
+		Client    struct {
+			Name        string `json:"name"`
+			CompanyName string `json:"companyName"`
+		} `json:"client"`
+	}
+
+	var allNodes []jobNode
+	cursor := ""
+
+	for len(allNodes) < jobberCandidateMaxJobs {
+		afterClause := ""
+		if cursor != "" {
+			afterClause = fmt.Sprintf(`, after: %q`, cursor)
+		}
+
+		query := fmt.Sprintf(`query JobCandidates {
+  jobs(first: %d%s) {
+    edges {
+      cursor
+      node {
+        id
+        jobNumber
+        title
+        client {
+          name
+          companyName
+        }
       }
     }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
   }
-}`
+}`, jobberCandidatePageSize, afterClause)
 
-	var response struct {
-		Data struct {
-			Jobs struct {
-				Nodes []struct {
-					ID        string `json:"id"`
-					JobNumber int    `json:"jobNumber"`
-					Title     string `json:"title"`
-					Client    struct {
-						Name        string `json:"name"`
-						CompanyName string `json:"companyName"`
-					} `json:"client"`
-				} `json:"nodes"`
-			} `json:"jobs"`
-		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		var response struct {
+			Data struct {
+				Jobs struct {
+					Edges []struct {
+						Cursor string  `json:"cursor"`
+						Node   jobNode `json:"node"`
+					} `json:"edges"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"jobs"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+
+		if err := executeJSONGraphQL(ctx, "https://api.getjobber.com/api/graphql", validConn.AccessToken, query, nil, &response); err != nil {
+			return nil, err
+		}
+		if len(response.Errors) > 0 {
+			return nil, fmt.Errorf("jobber graphql error: %s", response.Errors[0].Message)
+		}
+
+		for _, edge := range response.Data.Jobs.Edges {
+			allNodes = append(allNodes, edge.Node)
+		}
+
+		if !response.Data.Jobs.PageInfo.HasNextPage || response.Data.Jobs.PageInfo.EndCursor == "" {
+			break
+		}
+		cursor = response.Data.Jobs.PageInfo.EndCursor
 	}
 
-	if err := executeJSONGraphQL(ctx, "https://api.getjobber.com/api/graphql", validConn.AccessToken, query, nil, &response); err != nil {
-		return nil, err
-	}
-	if len(response.Errors) > 0 {
-		return nil, fmt.Errorf("jobber graphql error: %s", response.Errors[0].Message)
-	}
+	log.Debugf("GetJobberCandidates: fetched %d job(s) from Jobber for document %d", len(allNodes), document.ID)
 
-	candidates := make([]JobberMatchCandidate, 0, len(response.Data.Jobs.Nodes))
-	for _, node := range response.Data.Jobs.Nodes {
+	candidates := make([]JobberMatchCandidate, 0, len(allNodes))
+	for _, node := range allNodes {
 		clientName := strings.TrimSpace(node.Client.CompanyName)
 		if clientName == "" {
 			clientName = strings.TrimSpace(node.Client.Name)
@@ -825,7 +872,11 @@ func deriveJobberExpenseDate(suggestion DocumentSuggestion, fieldRef string) (st
 		raw = strings.TrimSpace(suggestion.OriginalDocument.CreatedDate)
 	}
 	if raw == "" {
-		return "", fmt.Errorf("missing expense date")
+		// Fall back to today's date so expense creation is never blocked by a missing date.
+		// Jobber requires a date; if the document has none we use today rather than failing.
+		raw = time.Now().Format("2006-01-02")
+		log.WithField("document_id", suggestion.ID).
+			Warnf("No date found for document; using today (%s) as the Jobber expense date", raw)
 	}
 	if len(raw) == len("2006-01-02") {
 		return raw + "T00:00:00Z", nil

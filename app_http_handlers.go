@@ -235,6 +235,11 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 		return
 	}
 
+	settingsMutex.RLock()
+	jobberEnabled := settings.JobberEnabled
+	jobberExpenseEnabled := settings.JobberExpenseEnabled
+	settingsMutex.RUnlock()
+
 	results := make([]DocumentIntegrationResult, 0, len(documents))
 	for _, document := range documents {
 		result := DocumentIntegrationResult{
@@ -243,25 +248,34 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 		}
 
 		if selectedCandidate, ok := getSelectedJobberCandidate(document); ok {
-			applied, err := app.applyJobberSelection(ctx, document.ID, selectedCandidate)
-			if err != nil {
-				result.JobberError = err.Error()
-				log.WithField("document_id", document.ID).WithError(err).Error("Failed to write Jobber fields to Paperless custom fields")
+			if !jobberEnabled {
+				log.WithField("document_id", document.ID).Debug("Jobber job selected but job matching is disabled in settings; skipping field write")
 			} else {
-				result.JobberApplied = applied
-				if !applied {
-					log.WithField("document_id", document.ID).Warn("Jobber job selected but no custom field mappings are configured — nothing was written to Paperless. Configure the field mappings under Settings → Integrations → Jobber.")
+				applied, err := app.applyJobberSelection(ctx, document.ID, selectedCandidate)
+				if err != nil {
+					result.JobberError = err.Error()
+					log.WithField("document_id", document.ID).WithError(err).Error("Failed to write Jobber fields to Paperless custom fields")
+				} else {
+					result.JobberApplied = applied
+					if !applied {
+						log.WithField("document_id", document.ID).Warn("Jobber job selected but no custom field mappings are configured — nothing was written to Paperless. Configure the field mappings under Settings → Integrations → Jobber.")
+					}
 				}
 			}
 
 			if document.CreateJobberExpense {
-				expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
-				if err != nil {
-					result.JobberExpenseError = err.Error()
-					log.WithField("document_id", document.ID).WithError(err).Error("Failed to create Jobber expense")
+				if !jobberExpenseEnabled {
+					log.WithField("document_id", document.ID).Debug("Jobber expense creation requested but expense creation is disabled in settings; skipping")
+					result.JobberExpenseError = "expense creation is disabled in Settings → Integrations → Jobber"
 				} else {
-					result.JobberExpenseCreated = true
-					result.JobberExpenseID = expenseResult.ExpenseID
+					expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
+					if err != nil {
+						result.JobberExpenseError = err.Error()
+						log.WithField("document_id", document.ID).WithError(err).Error("Failed to create Jobber expense")
+					} else {
+						result.JobberExpenseCreated = true
+						result.JobberExpenseID = expenseResult.ExpenseID
+					}
 				}
 			}
 		}
