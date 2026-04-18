@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import IntegrationActionLog from './IntegrationActionLog';
 
 interface CustomField {
   id: number;
@@ -575,6 +576,10 @@ const IntegrationsEditor: React.FC = () => {
         >
           {isSaving ? 'Saving…' : 'Save Changes'}
         </button>
+      </div>
+
+      <div className="mt-8">
+        <IntegrationActionLog />
       </div>
     </div>
   );

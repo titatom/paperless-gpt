@@ -268,3 +268,30 @@ func TestDeriveJobberExpenseTotalUsesMappedField(t *testing.T) {
 		t.Fatalf("deriveJobberExpenseTotal() = %v, want %v", got, 456.78)
 	}
 }
+
+func TestDeriveJobberExpenseDateFallsBackToToday(t *testing.T) {
+	// A suggestion with no date at all — should not error, should return today.
+	suggestion := DocumentSuggestion{ID: 99}
+	got, err := deriveJobberExpenseDate(suggestion, "")
+	if err != nil {
+		t.Fatalf("deriveJobberExpenseDate() unexpected error: %v", err)
+	}
+	today := time.Now().Format("2006-01-02")
+	expected := today + "T00:00:00Z"
+	if got != expected {
+		t.Fatalf("deriveJobberExpenseDate() = %q, want %q (today)", got, expected)
+	}
+}
+
+func TestDeriveJobberExpenseDateUsesOriginalDocumentDate(t *testing.T) {
+	suggestion := DocumentSuggestion{
+		OriginalDocument: Document{CreatedDate: "2025-03-10"},
+	}
+	got, err := deriveJobberExpenseDate(suggestion, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "2025-03-10T00:00:00Z" {
+		t.Fatalf("got %q, want %q", got, "2025-03-10T00:00:00Z")
+	}
+}

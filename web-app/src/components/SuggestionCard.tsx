@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import ArrowTopRightOnSquareIcon from "@heroicons/react/24/outline/ArrowTopRightOnSquareIcon";
 import EyeIcon from "@heroicons/react/24/outline/EyeIcon";
 import TrashIcon from "@heroicons/react/24/outline/TrashIcon";
@@ -20,6 +20,7 @@ interface SuggestionCardProps {
   onGoogleDriveToggle: (docId: number, enabled: boolean) => void;
   onJobberExpenseToggle: (docId: number, enabled: boolean) => void;
   jobberConnected: boolean;
+  jobberExpenseEnabled?: boolean;
   googleDriveConnected: boolean;
   integrationResult?: DocumentIntegrationResult;
   paperlessUrl?: string;
@@ -40,6 +41,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   onGoogleDriveToggle,
   onJobberExpenseToggle,
   jobberConnected,
+  jobberExpenseEnabled = true,
   googleDriveConnected,
   integrationResult,
   paperlessUrl,
@@ -47,11 +49,27 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [jobberSearch, setJobberSearch] = useState("");
   const sortedAvailableTags = useMemo(
     () => [...availableTags].sort((a, b) => a.name.localeCompare(b.name)),
     [availableTags]
   );
   const document = suggestion.original_document;
+
+  const filteredJobberCandidates = useMemo(() => {
+    const q = jobberSearch.trim().toLowerCase();
+    if (!q) return suggestion.jobber_candidates ?? [];
+    return (suggestion.jobber_candidates ?? []).filter(
+      (c) =>
+        c.job_number?.toLowerCase().includes(q) ||
+        c.client_name?.toLowerCase().includes(q) ||
+        c.job_name?.toLowerCase().includes(q)
+    );
+  }, [suggestion.jobber_candidates, jobberSearch]);
+
+  const handleJobberSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setJobberSearch(e.target.value);
+  }, []);
 
   const handleDeleteClick = () => {
     if (confirmDelete) {
@@ -274,25 +292,43 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Jobber Match
+                {(suggestion.jobber_candidates?.length ?? 0) > 0 && (
+                  <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-500">
+                    ({suggestion.jobber_candidates!.length} jobs)
+                  </span>
+                )}
               </label>
+              {jobberConnected && (suggestion.jobber_candidates?.length ?? 0) > 10 && (
+                <input
+                  type="text"
+                  value={jobberSearch}
+                  onChange={handleJobberSearchChange}
+                  placeholder="Search by job #, client, or title…"
+                  className="mt-1.5 w-full rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
+                />
+              )}
               <select
                 value={suggestion.selected_jobber_match_id || ""}
                 onChange={(e) => onJobberMatchChange(suggestion.id, e.target.value)}
                 disabled={!jobberConnected || !suggestion.jobber_candidates?.length}
-                className="mt-2 w-full rounded border border-gray-300 px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                className="mt-1.5 w-full rounded border border-gray-300 px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                size={filteredJobberCandidates.length > 0 && jobberSearch ? Math.min(filteredJobberCandidates.length + 1, 8) : 1}
               >
                 <option value="">
                   {!jobberConnected
                     ? "Connect Jobber in Settings"
                     : suggestion.jobber_candidates?.length
-                      ? "No Jobber match"
+                      ? "— No match —"
                       : "No Jobber matches found"}
                 </option>
-                {suggestion.jobber_candidates?.map((candidate) => (
+                {filteredJobberCandidates.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
-                    #{candidate.job_number} - {candidate.client_name} - {candidate.job_name}
+                    #{candidate.job_number} — {candidate.client_name} — {candidate.job_name}
                   </option>
                 ))}
+                {jobberSearch && filteredJobberCandidates.length === 0 && (
+                  <option disabled value="">No results for "{jobberSearch}"</option>
+                )}
               </select>
             </div>
 
@@ -301,7 +337,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 type="checkbox"
                 id={`jobber-expense-${suggestion.id}`}
                 checked={suggestion.create_jobber_expense ?? false}
-                disabled={!jobberConnected || !suggestion.selected_jobber_match_id}
+                disabled={!jobberConnected || !suggestion.selected_jobber_match_id || !jobberExpenseEnabled}
                 onChange={(e) => onJobberExpenseToggle(suggestion.id, e.target.checked)}
                 className="mt-1 h-4 w-4"
               />
@@ -315,9 +351,11 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {!jobberConnected
                     ? "Connect Jobber in Settings to enable expense creation."
-                    : !suggestion.selected_jobber_match_id
-                      ? "Select a Jobber job first."
-                      : "Creates an expense linked to the selected Jobber job using the approved document details."}
+                    : !jobberExpenseEnabled
+                      ? "Enable expense creation in Settings → Integrations → Jobber first."
+                      : !suggestion.selected_jobber_match_id
+                        ? "Select a Jobber job first."
+                        : "Creates an expense linked to the selected Jobber job using the approved document details."}
                 </p>
               </div>
             </div>
@@ -351,12 +389,19 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               integrationResult?.jobber_error ||
               integrationResult?.jobber_expense_error ||
               integrationResult?.google_drive_uploaded ||
-              integrationResult?.google_drive_error) && (
+              integrationResult?.google_drive_error ||
+              (integrationResult && integrationResult.paperless_updated && integrationResult.jobber_applied === false && !integrationResult.jobber_error)) && (
               <div className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
                 <h4 className="font-semibold text-gray-700 dark:text-gray-300">Last apply result</h4>
                 {integrationResult?.jobber_applied && (
                   <p className="mt-1 text-green-700 dark:text-green-300">
-                    Jobber fields saved to Paperless.
+                    Jobber fields saved to Paperless custom fields.
+                  </p>
+                )}
+                {integrationResult && integrationResult.paperless_updated && integrationResult.jobber_applied === false && !integrationResult.jobber_error && (
+                  <p className="mt-1 text-amber-700 dark:text-amber-300">
+                    Jobber job was selected but no custom field mappings are configured — nothing was written to Paperless.
+                    Go to <strong>Settings → Integrations → Jobber → Job matching</strong> to map Jobber fields to Paperless custom fields.
                   </p>
                 )}
                 {integrationResult?.jobber_expense_created && (
@@ -369,12 +414,12 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 )}
                 {integrationResult?.jobber_error && (
                   <p className="mt-1 text-red-700 dark:text-red-300">
-                    Jobber: {integrationResult.jobber_error}
+                    Jobber field mapping error: {integrationResult.jobber_error}
                   </p>
                 )}
                 {integrationResult?.jobber_expense_error && (
                   <p className="mt-1 text-red-700 dark:text-red-300">
-                    Jobber expense: {integrationResult.jobber_expense_error}
+                    Jobber expense error: {integrationResult.jobber_expense_error}
                   </p>
                 )}
                 {integrationResult?.google_drive_uploaded && (

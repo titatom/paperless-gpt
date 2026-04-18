@@ -117,6 +117,8 @@ const DocumentProcessor: React.FC = () => {
   const [paperlessUrl, setPaperlessUrl] = useState<string>("");
   const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, IntegrationStatus>>({});
   const [integrationResults, setIntegrationResults] = useState<DocumentIntegrationResult[]>([]);
+  const [jobberEnabled, setJobberEnabled] = useState(true);
+  const [jobberExpenseEnabled, setJobberExpenseEnabled] = useState(true);
   const [generateTitles, setGenerateTitles] = useState(true);
   const [generateTags, setGenerateTags] = useState(true);
   const [generateCorrespondents, setGenerateCorrespondents] = useState(true);
@@ -138,13 +140,14 @@ const DocumentProcessor: React.FC = () => {
   // Custom hook to fetch initial data
   const fetchInitialData = useCallback(async () => {
     try {
-      const [filterTagRes, documentsRes, tagsRes, customFieldsRes, paperlessUrlRes, integrationsRes] = await Promise.all([
+      const [filterTagRes, documentsRes, tagsRes, customFieldsRes, paperlessUrlRes, integrationsRes, settingsRes] = await Promise.all([
         axios.get<{ tag: string }>("./api/filter-tag"),
         axios.get<Document[]>("./api/documents"),
         axios.get<Record<string, number>>("./api/tags"),
         axios.get<CustomField[]>('./api/custom_fields'),
         axios.get<{ url: string }>("./api/paperless-url"),
         axios.get<{ providers: IntegrationStatus[] }>("./api/integrations"),
+        axios.get<{ settings: { jobber_enabled?: boolean; jobber_expense_enabled?: boolean } }>("./api/settings"),
       ]);
 
       setFilterTag(filterTagRes.data.tag);
@@ -155,6 +158,8 @@ const DocumentProcessor: React.FC = () => {
           (integrationsRes.data.providers || []).map((provider) => [provider.provider, provider])
         )
       );
+      setJobberEnabled(settingsRes.data.settings?.jobber_enabled ?? true);
+      setJobberExpenseEnabled(settingsRes.data.settings?.jobber_expense_enabled ?? true);
       setDocuments(documentsRes.data);
       setSelectedDocuments(documentsRes.data.map((d: Document) => d.id));
       const tags = Object.keys(tagsRes.data).map((tag) => ({
@@ -217,11 +222,16 @@ const DocumentProcessor: React.FC = () => {
       setSuggestions(processedSuggestions);
       setIntegrationResults([]);
 
-      if (integrationStatuses.jobber?.connected) {
+      if (integrationStatuses.jobber?.connected && jobberEnabled) {
         try {
+          // Pass the full document objects so the server can rank candidates
+          // without making extra Paperless API calls for each document.
           const jobberResponse = await axios.post<{ candidates: Record<string, JobberMatchCandidate[]> }>(
             "./api/integrations/jobber/match-candidates",
-            { document_ids: docsToProcess.map((d) => d.id) }
+            {
+              document_ids: docsToProcess.map((d) => d.id),
+              documents: docsToProcess,
+            }
           );
 
           setSuggestions((current) =>
@@ -667,6 +677,8 @@ const DocumentProcessor: React.FC = () => {
           onDeleteDocument={handleDeleteDocument}
           integrationStatuses={integrationStatuses}
           integrationResults={integrationResults}
+          jobberEnabled={jobberEnabled}
+          jobberExpenseEnabled={jobberExpenseEnabled}
         />
       )}
 

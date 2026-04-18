@@ -235,6 +235,11 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 		return
 	}
 
+	settingsMutex.RLock()
+	jobberEnabled := settings.JobberEnabled
+	jobberExpenseEnabled := settings.JobberExpenseEnabled
+	settingsMutex.RUnlock()
+
 	results := make([]DocumentIntegrationResult, 0, len(documents))
 	for _, document := range documents {
 		result := DocumentIntegrationResult{
@@ -243,19 +248,34 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 		}
 
 		if selectedCandidate, ok := getSelectedJobberCandidate(document); ok {
-			if err := app.applyJobberSelection(ctx, document.ID, selectedCandidate); err != nil {
-				result.JobberError = err.Error()
+			if !jobberEnabled {
+				log.WithField("document_id", document.ID).Debug("Jobber job selected but job matching is disabled in settings; skipping field write")
 			} else {
-				result.JobberApplied = true
+				applied, err := app.applyJobberSelection(ctx, document.ID, selectedCandidate)
+				if err != nil {
+					result.JobberError = err.Error()
+					log.WithField("document_id", document.ID).WithError(err).Error("Failed to write Jobber fields to Paperless custom fields")
+				} else {
+					result.JobberApplied = applied
+					if !applied {
+						log.WithField("document_id", document.ID).Warn("Jobber job selected but no custom field mappings are configured — nothing was written to Paperless. Configure the field mappings under Settings → Integrations → Jobber.")
+					}
+				}
 			}
 
 			if document.CreateJobberExpense {
-				expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
-				if err != nil {
-					result.JobberExpenseError = err.Error()
+				if !jobberExpenseEnabled {
+					log.WithField("document_id", document.ID).Debug("Jobber expense creation requested but expense creation is disabled in settings; skipping")
+					result.JobberExpenseError = "expense creation is disabled in Settings → Integrations → Jobber"
 				} else {
-					result.JobberExpenseCreated = true
-					result.JobberExpenseID = expenseResult.ExpenseID
+					expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
+					if err != nil {
+						result.JobberExpenseError = err.Error()
+						log.WithField("document_id", document.ID).WithError(err).Error("Failed to create Jobber expense")
+					} else {
+						result.JobberExpenseCreated = true
+						result.JobberExpenseID = expenseResult.ExpenseID
+					}
 				}
 			}
 		}
@@ -296,6 +316,47 @@ func (app *App) getIntegrationStatusHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, status)
+}
+
+// getIntegrationActionLogHandler returns paginated integration action log entries.
+// Query params: page (default 1), pageSize (default 20, max 100), provider (optional filter).
+func (app *App) getIntegrationActionLogHandler(c *gin.Context) {
+	page := 1
+	pageSize := 20
+	if p, err := strconv.Atoi(c.DefaultQuery("page", "1")); err == nil && p > 0 {
+		page = p
+	}
+	if ps, err := strconv.Atoi(c.DefaultQuery("pageSize", "20")); err == nil && ps > 0 && ps <= 100 {
+		pageSize = ps
+	}
+	provider := strings.TrimSpace(c.Query("provider"))
+
+	db := app.Database.WithContext(c.Request.Context()).Model(&IntegrationActionLog{})
+	if provider != "" {
+		db = db.Where("provider = ?", provider)
+	}
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count action log entries"})
+		return
+	}
+
+	var entries []IntegrationActionLog
+	offset := (page - 1) * pageSize
+	if err := db.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&entries).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve action log entries"})
+		return
+	}
+
+	totalPages := (int(total) + pageSize - 1) / pageSize
+	c.JSON(http.StatusOK, gin.H{
+		"items":       entries,
+		"totalItems":  total,
+		"totalPages":  totalPages,
+		"currentPage": page,
+		"pageSize":    pageSize,
+	})
 }
 
 func (app *App) startIntegrationConnectHandler(c *gin.Context) {
@@ -507,7 +568,12 @@ func (app *App) jobberReceiptHandler(c *gin.Context) {
 
 func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 	var req struct {
+		// DocumentIDs lists the documents to rank candidates for.
 		DocumentIDs []int `json:"document_ids"`
+		// Documents, if provided, supplies the full document objects so the
+		// handler does not need to fetch them from Paperless.  Elements are
+		// matched by position/ID to DocumentIDs.
+		Documents []Document `json:"documents,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -515,41 +581,70 @@ func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 		return
 	}
 
-	type entry struct {
-		id         int
-		candidates []JobberMatchCandidate
+	if len(req.DocumentIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"candidates": map[int][]JobberMatchCandidate{}})
+		return
 	}
 
 	ctx := c.Request.Context()
-	eg, egCtx := errgroup.WithContext(ctx)
-	ch := make(chan entry, len(req.DocumentIDs))
 
-	for _, documentID := range req.DocumentIDs {
-		documentID := documentID
-		eg.Go(func() error {
-			document, err := app.Client.GetDocument(egCtx, documentID)
-			if err != nil {
-				return fmt.Errorf("error fetching document %d: %w", documentID, err)
-			}
-			candidates, err := app.Integrations.GetJobberCandidates(egCtx, document)
-			if err != nil {
-				return fmt.Errorf("error fetching Jobber candidates for document %d: %w", documentID, err)
-			}
-			ch <- entry{id: documentID, candidates: candidates}
-			return nil
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		close(ch)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Fetch the full Jobber job list once — all documents share the same universe
+	// of candidates, so making one round of paginated API calls is enough.
+	allCandidates, err := app.Integrations.FetchAllJobberCandidates(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("error fetching Jobber jobs: %v", err)})
 		return
 	}
-	close(ch)
 
+	// Build a lookup map from the documents provided inline (avoids extra Paperless API calls).
+	docByID := make(map[int]Document, len(req.Documents))
+	for _, d := range req.Documents {
+		docByID[d.ID] = d
+	}
+
+	// For any document ID not supplied inline, fetch from Paperless in parallel.
+	missing := make([]int, 0)
+	for _, id := range req.DocumentIDs {
+		if _, ok := docByID[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+
+	if len(missing) > 0 {
+		type fetchResult struct {
+			doc Document
+			err error
+		}
+		ch := make(chan fetchResult, len(missing))
+		eg, egCtx := errgroup.WithContext(ctx)
+		for _, documentID := range missing {
+			documentID := documentID
+			eg.Go(func() error {
+				doc, err := app.Client.GetDocument(egCtx, documentID)
+				ch <- fetchResult{doc: doc, err: err}
+				return nil // collect errors via channel; don't abort siblings
+			})
+		}
+		_ = eg.Wait()
+		close(ch)
+		for r := range ch {
+			if r.err != nil {
+				log.WithError(r.err).Warnf("jobberMatchCandidatesHandler: could not fetch document %d from Paperless; skipping ranking for this document", r.doc.ID)
+				continue
+			}
+			docByID[r.doc.ID] = r.doc
+		}
+	}
+
+	// Rank the shared candidate list per document in memory — no more API calls.
 	results := make(map[int][]JobberMatchCandidate, len(req.DocumentIDs))
-	for e := range ch {
-		results[e.id] = e.candidates
+	for _, id := range req.DocumentIDs {
+		doc, ok := docByID[id]
+		if !ok {
+			results[id] = allCandidates
+			continue
+		}
+		results[id] = rankJobberCandidates(doc, allCandidates)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"candidates": results})
@@ -584,28 +679,55 @@ func getSelectedJobberCandidate(document DocumentSuggestion) (JobberMatchCandida
 	return JobberMatchCandidate{}, false
 }
 
-func (app *App) applyJobberSelection(ctx context.Context, documentID int, candidate JobberMatchCandidate) error {
+// applyJobberSelection writes the selected Jobber job's details into the
+// Paperless-ngx custom fields that are configured under Settings → Integrations.
+// It returns (true, nil) when at least one field was written, (false, nil) when
+// no field mappings are configured (a no-op, not an error), and (false, err)
+// when the Paperless API call failed.
+func (app *App) applyJobberSelection(ctx context.Context, documentID int, candidate JobberMatchCandidate) (bool, error) {
 	settingsMutex.RLock()
-	fieldValues := map[int]interface{}{}
-	if settings.JobberJobIDFieldID > 0 {
-		fieldValues[settings.JobberJobIDFieldID] = candidate.ID
-	}
-	if settings.JobberJobNumberFieldID > 0 {
-		fieldValues[settings.JobberJobNumberFieldID] = candidate.JobNumber
-	}
-	if settings.JobberClientFieldID > 0 {
-		fieldValues[settings.JobberClientFieldID] = candidate.ClientName
-	}
-	if settings.JobberJobNameFieldID > 0 {
-		fieldValues[settings.JobberJobNameFieldID] = candidate.JobName
-	}
+	jobIDFieldID := settings.JobberJobIDFieldID
+	jobNumberFieldID := settings.JobberJobNumberFieldID
+	clientFieldID := settings.JobberClientFieldID
+	jobNameFieldID := settings.JobberJobNameFieldID
 	settingsMutex.RUnlock()
 
-	if len(fieldValues) == 0 {
-		return nil
+	fieldValues := map[int]interface{}{}
+	if jobIDFieldID > 0 {
+		fieldValues[jobIDFieldID] = candidate.ID
+	}
+	if jobNumberFieldID > 0 {
+		fieldValues[jobNumberFieldID] = candidate.JobNumber
+	}
+	if clientFieldID > 0 {
+		fieldValues[clientFieldID] = candidate.ClientName
+	}
+	if jobNameFieldID > 0 {
+		fieldValues[jobNameFieldID] = candidate.JobName
 	}
 
-	return app.Client.UpsertDocumentCustomFields(ctx, documentID, fieldValues, app.Database)
+	if len(fieldValues) == 0 {
+		log.WithField("document_id", documentID).
+			WithFields(map[string]interface{}{
+				"configured_job_id_field":     jobIDFieldID,
+				"configured_job_number_field": jobNumberFieldID,
+				"configured_client_field":     clientFieldID,
+				"configured_job_name_field":   jobNameFieldID,
+			}).
+			Debug("No Jobber → Paperless field mappings configured; skipping custom field update")
+		return false, nil
+	}
+
+	log.WithField("document_id", documentID).
+		WithField("jobber_job_id", candidate.ID).
+		WithField("jobber_job_number", candidate.JobNumber).
+		WithField("fields_to_write", len(fieldValues)).
+		Info("Writing Jobber job details to Paperless custom fields")
+
+	if err := app.Client.UpsertDocumentCustomFields(ctx, documentID, fieldValues, app.Database); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func mergeSettingsPatch(current Settings, patch map[string]interface{}) (Settings, error) {
