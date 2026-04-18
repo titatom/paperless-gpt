@@ -568,7 +568,12 @@ func (app *App) jobberReceiptHandler(c *gin.Context) {
 
 func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 	var req struct {
+		// DocumentIDs lists the documents to rank candidates for.
 		DocumentIDs []int `json:"document_ids"`
+		// Documents, if provided, supplies the full document objects so the
+		// handler does not need to fetch them from Paperless.  Elements are
+		// matched by position/ID to DocumentIDs.
+		Documents []Document `json:"documents,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -576,41 +581,70 @@ func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 		return
 	}
 
-	type entry struct {
-		id         int
-		candidates []JobberMatchCandidate
+	if len(req.DocumentIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"candidates": map[int][]JobberMatchCandidate{}})
+		return
 	}
 
 	ctx := c.Request.Context()
-	eg, egCtx := errgroup.WithContext(ctx)
-	ch := make(chan entry, len(req.DocumentIDs))
 
-	for _, documentID := range req.DocumentIDs {
-		documentID := documentID
-		eg.Go(func() error {
-			document, err := app.Client.GetDocument(egCtx, documentID)
-			if err != nil {
-				return fmt.Errorf("error fetching document %d: %w", documentID, err)
-			}
-			candidates, err := app.Integrations.GetJobberCandidates(egCtx, document)
-			if err != nil {
-				return fmt.Errorf("error fetching Jobber candidates for document %d: %w", documentID, err)
-			}
-			ch <- entry{id: documentID, candidates: candidates}
-			return nil
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		close(ch)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Fetch the full Jobber job list once — all documents share the same universe
+	// of candidates, so making one round of paginated API calls is enough.
+	allCandidates, err := app.Integrations.FetchAllJobberCandidates(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("error fetching Jobber jobs: %v", err)})
 		return
 	}
-	close(ch)
 
+	// Build a lookup map from the documents provided inline (avoids extra Paperless API calls).
+	docByID := make(map[int]Document, len(req.Documents))
+	for _, d := range req.Documents {
+		docByID[d.ID] = d
+	}
+
+	// For any document ID not supplied inline, fetch from Paperless in parallel.
+	missing := make([]int, 0)
+	for _, id := range req.DocumentIDs {
+		if _, ok := docByID[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+
+	if len(missing) > 0 {
+		type fetchResult struct {
+			doc Document
+			err error
+		}
+		ch := make(chan fetchResult, len(missing))
+		eg, egCtx := errgroup.WithContext(ctx)
+		for _, documentID := range missing {
+			documentID := documentID
+			eg.Go(func() error {
+				doc, err := app.Client.GetDocument(egCtx, documentID)
+				ch <- fetchResult{doc: doc, err: err}
+				return nil // collect errors via channel; don't abort siblings
+			})
+		}
+		_ = eg.Wait()
+		close(ch)
+		for r := range ch {
+			if r.err != nil {
+				log.WithError(r.err).Warnf("jobberMatchCandidatesHandler: could not fetch document %d from Paperless; skipping ranking for this document", r.doc.ID)
+				continue
+			}
+			docByID[r.doc.ID] = r.doc
+		}
+	}
+
+	// Rank the shared candidate list per document in memory — no more API calls.
 	results := make(map[int][]JobberMatchCandidate, len(req.DocumentIDs))
-	for e := range ch {
-		results[e.id] = e.candidates
+	for _, id := range req.DocumentIDs {
+		doc, ok := docByID[id]
+		if !ok {
+			results[id] = allCandidates
+			continue
+		}
+		results[id] = rankJobberCandidates(doc, allCandidates)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"candidates": results})

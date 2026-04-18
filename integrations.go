@@ -440,7 +440,10 @@ const jobberCandidatePageSize = 100
 // very large accounts causing excessive API calls (100 jobs/page × 5 pages = 500 max).
 const jobberCandidateMaxJobs = 500
 
-func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document Document) ([]JobberMatchCandidate, error) {
+// FetchAllJobberCandidates fetches the full job list from Jobber using cursor-based
+// pagination and returns it as an unranked slice of JobberMatchCandidate.
+// It is intended to be called once per batch request, not once per document.
+func (s *IntegrationsService) FetchAllJobberCandidates(ctx context.Context) ([]JobberMatchCandidate, error) {
 	conn, err := getOptionalConnectionByProvider(s.DB.WithContext(ctx), integrationProviderJobber)
 	if err != nil {
 		return nil, err
@@ -455,9 +458,6 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 		return nil, err
 	}
 
-	// Fetch jobs with cursor-based pagination until we have enough candidates or
-	// there are no more pages. We query all non-cancelled statuses so that
-	// historical receipts can be matched against completed jobs too.
 	type jobNode struct {
 		ID        string `json:"id"`
 		JobNumber int    `json:"jobNumber"`
@@ -533,7 +533,7 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 		cursor = response.Data.Jobs.PageInfo.EndCursor
 	}
 
-	log.Debugf("GetJobberCandidates: fetched %d job(s) from Jobber for document %d", len(allNodes), document.ID)
+	log.Debugf("fetchAllJobberCandidates: fetched %d job(s) from Jobber", len(allNodes))
 
 	candidates := make([]JobberMatchCandidate, 0, len(allNodes))
 	for _, node := range allNodes {
@@ -553,6 +553,17 @@ func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document 
 		})
 	}
 
+	return candidates, nil
+}
+
+// GetJobberCandidates returns the full Jobber job list ranked by relevance to the
+// given document. Use FetchAllJobberCandidates when processing multiple documents
+// to avoid redundant API calls.
+func (s *IntegrationsService) GetJobberCandidates(ctx context.Context, document Document) ([]JobberMatchCandidate, error) {
+	candidates, err := s.FetchAllJobberCandidates(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return rankJobberCandidates(document, candidates), nil
 }
 

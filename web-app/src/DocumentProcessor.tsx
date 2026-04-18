@@ -222,11 +222,16 @@ const DocumentProcessor: React.FC = () => {
       setSuggestions(processedSuggestions);
       setIntegrationResults([]);
 
-      if (integrationStatuses.jobber?.connected) {
+      if (integrationStatuses.jobber?.connected && jobberEnabled) {
         try {
+          // Pass the full document objects so the server can rank candidates
+          // without making extra Paperless API calls for each document.
           const jobberResponse = await axios.post<{ candidates: Record<string, JobberMatchCandidate[]> }>(
             "./api/integrations/jobber/match-candidates",
-            { document_ids: docsToProcess.map((d) => d.id) }
+            {
+              document_ids: docsToProcess.map((d) => d.id),
+              documents: docsToProcess,
+            }
           );
 
           setSuggestions((current) =>
