@@ -20,6 +20,7 @@ interface SuggestionCardProps {
   onGoogleDriveToggle: (docId: number, enabled: boolean) => void;
   onJobberExpenseToggle: (docId: number, enabled: boolean) => void;
   jobberConnected: boolean;
+  jobberEnabled?: boolean;
   jobberExpenseEnabled?: boolean;
   googleDriveConnected: boolean;
   integrationResult?: DocumentIntegrationResult;
@@ -41,6 +42,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   onGoogleDriveToggle,
   onJobberExpenseToggle,
   jobberConnected,
+  jobberEnabled = true,
   jobberExpenseEnabled = true,
   googleDriveConnected,
   integrationResult,
@@ -298,7 +300,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                   </span>
                 )}
               </label>
-              {jobberConnected && (suggestion.jobber_candidates?.length ?? 0) > 10 && (
+              {jobberConnected && jobberEnabled && (suggestion.jobber_candidates?.length ?? 0) > 10 && (
                 <input
                   type="text"
                   value={jobberSearch}
@@ -310,16 +312,18 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               <select
                 value={suggestion.selected_jobber_match_id || ""}
                 onChange={(e) => onJobberMatchChange(suggestion.id, e.target.value)}
-                disabled={!jobberConnected || !suggestion.jobber_candidates?.length}
+                disabled={!jobberConnected || !jobberEnabled || !suggestion.jobber_candidates?.length}
                 className="mt-1.5 w-full rounded border border-gray-300 px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                 size={filteredJobberCandidates.length > 0 && jobberSearch ? Math.min(filteredJobberCandidates.length + 1, 8) : 1}
               >
                 <option value="">
                   {!jobberConnected
                     ? "Connect Jobber in Settings"
-                    : suggestion.jobber_candidates?.length
-                      ? "— No match —"
-                      : "No Jobber matches found"}
+                    : !jobberEnabled
+                      ? "Enable Jobber in Settings → Integrations"
+                      : suggestion.jobber_candidates?.length
+                        ? "— No match —"
+                        : "No Jobber matches found"}
                 </option>
                 {filteredJobberCandidates.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
@@ -337,7 +341,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 type="checkbox"
                 id={`jobber-expense-${suggestion.id}`}
                 checked={suggestion.create_jobber_expense ?? false}
-                disabled={!jobberConnected || !suggestion.selected_jobber_match_id || !jobberExpenseEnabled}
+                disabled={!jobberConnected || !jobberEnabled || !suggestion.selected_jobber_match_id || !jobberExpenseEnabled}
                 onChange={(e) => onJobberExpenseToggle(suggestion.id, e.target.checked)}
                 className="mt-1 h-4 w-4"
               />
@@ -351,11 +355,13 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {!jobberConnected
                     ? "Connect Jobber in Settings to enable expense creation."
-                    : !jobberExpenseEnabled
-                      ? "Enable expense creation in Settings → Integrations → Jobber first."
-                      : !suggestion.selected_jobber_match_id
-                        ? "Select a Jobber job first."
-                        : "Creates an expense linked to the selected Jobber job using the approved document details."}
+                    : !jobberEnabled
+                      ? "Enable Jobber in Settings → Integrations first."
+                      : !jobberExpenseEnabled
+                        ? "Enable expense creation in Settings → Integrations → Jobber first."
+                        : !suggestion.selected_jobber_match_id
+                          ? "Select a Jobber job first."
+                          : "Creates an expense linked to the selected Jobber job using the approved document details."}
                 </p>
               </div>
             </div>
