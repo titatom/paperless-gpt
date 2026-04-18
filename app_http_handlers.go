@@ -243,16 +243,22 @@ func (app *App) updateDocumentsHandler(c *gin.Context) {
 		}
 
 		if selectedCandidate, ok := getSelectedJobberCandidate(document); ok {
-			if err := app.applyJobberSelection(ctx, document.ID, selectedCandidate); err != nil {
+			applied, err := app.applyJobberSelection(ctx, document.ID, selectedCandidate)
+			if err != nil {
 				result.JobberError = err.Error()
+				log.WithField("document_id", document.ID).WithError(err).Error("Failed to write Jobber fields to Paperless custom fields")
 			} else {
-				result.JobberApplied = true
+				result.JobberApplied = applied
+				if !applied {
+					log.WithField("document_id", document.ID).Warn("Jobber job selected but no custom field mappings are configured — nothing was written to Paperless. Configure the field mappings under Settings → Integrations → Jobber.")
+				}
 			}
 
 			if document.CreateJobberExpense {
 				expenseResult, err := app.Integrations.CreateJobberExpense(ctx, app.Client, document, selectedCandidate)
 				if err != nil {
 					result.JobberExpenseError = err.Error()
+					log.WithField("document_id", document.ID).WithError(err).Error("Failed to create Jobber expense")
 				} else {
 					result.JobberExpenseCreated = true
 					result.JobberExpenseID = expenseResult.ExpenseID
@@ -296,6 +302,47 @@ func (app *App) getIntegrationStatusHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, status)
+}
+
+// getIntegrationActionLogHandler returns paginated integration action log entries.
+// Query params: page (default 1), pageSize (default 20, max 100), provider (optional filter).
+func (app *App) getIntegrationActionLogHandler(c *gin.Context) {
+	page := 1
+	pageSize := 20
+	if p, err := strconv.Atoi(c.DefaultQuery("page", "1")); err == nil && p > 0 {
+		page = p
+	}
+	if ps, err := strconv.Atoi(c.DefaultQuery("pageSize", "20")); err == nil && ps > 0 && ps <= 100 {
+		pageSize = ps
+	}
+	provider := strings.TrimSpace(c.Query("provider"))
+
+	db := app.Database.WithContext(c.Request.Context()).Model(&IntegrationActionLog{})
+	if provider != "" {
+		db = db.Where("provider = ?", provider)
+	}
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count action log entries"})
+		return
+	}
+
+	var entries []IntegrationActionLog
+	offset := (page - 1) * pageSize
+	if err := db.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&entries).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve action log entries"})
+		return
+	}
+
+	totalPages := (int(total) + pageSize - 1) / pageSize
+	c.JSON(http.StatusOK, gin.H{
+		"items":       entries,
+		"totalItems":  total,
+		"totalPages":  totalPages,
+		"currentPage": page,
+		"pageSize":    pageSize,
+	})
 }
 
 func (app *App) startIntegrationConnectHandler(c *gin.Context) {
@@ -584,28 +631,55 @@ func getSelectedJobberCandidate(document DocumentSuggestion) (JobberMatchCandida
 	return JobberMatchCandidate{}, false
 }
 
-func (app *App) applyJobberSelection(ctx context.Context, documentID int, candidate JobberMatchCandidate) error {
+// applyJobberSelection writes the selected Jobber job's details into the
+// Paperless-ngx custom fields that are configured under Settings → Integrations.
+// It returns (true, nil) when at least one field was written, (false, nil) when
+// no field mappings are configured (a no-op, not an error), and (false, err)
+// when the Paperless API call failed.
+func (app *App) applyJobberSelection(ctx context.Context, documentID int, candidate JobberMatchCandidate) (bool, error) {
 	settingsMutex.RLock()
-	fieldValues := map[int]interface{}{}
-	if settings.JobberJobIDFieldID > 0 {
-		fieldValues[settings.JobberJobIDFieldID] = candidate.ID
-	}
-	if settings.JobberJobNumberFieldID > 0 {
-		fieldValues[settings.JobberJobNumberFieldID] = candidate.JobNumber
-	}
-	if settings.JobberClientFieldID > 0 {
-		fieldValues[settings.JobberClientFieldID] = candidate.ClientName
-	}
-	if settings.JobberJobNameFieldID > 0 {
-		fieldValues[settings.JobberJobNameFieldID] = candidate.JobName
-	}
+	jobIDFieldID := settings.JobberJobIDFieldID
+	jobNumberFieldID := settings.JobberJobNumberFieldID
+	clientFieldID := settings.JobberClientFieldID
+	jobNameFieldID := settings.JobberJobNameFieldID
 	settingsMutex.RUnlock()
 
-	if len(fieldValues) == 0 {
-		return nil
+	fieldValues := map[int]interface{}{}
+	if jobIDFieldID > 0 {
+		fieldValues[jobIDFieldID] = candidate.ID
+	}
+	if jobNumberFieldID > 0 {
+		fieldValues[jobNumberFieldID] = candidate.JobNumber
+	}
+	if clientFieldID > 0 {
+		fieldValues[clientFieldID] = candidate.ClientName
+	}
+	if jobNameFieldID > 0 {
+		fieldValues[jobNameFieldID] = candidate.JobName
 	}
 
-	return app.Client.UpsertDocumentCustomFields(ctx, documentID, fieldValues, app.Database)
+	if len(fieldValues) == 0 {
+		log.WithField("document_id", documentID).
+			WithFields(map[string]interface{}{
+				"configured_job_id_field":     jobIDFieldID,
+				"configured_job_number_field": jobNumberFieldID,
+				"configured_client_field":     clientFieldID,
+				"configured_job_name_field":   jobNameFieldID,
+			}).
+			Debug("No Jobber → Paperless field mappings configured; skipping custom field update")
+		return false, nil
+	}
+
+	log.WithField("document_id", documentID).
+		WithField("jobber_job_id", candidate.ID).
+		WithField("jobber_job_number", candidate.JobNumber).
+		WithField("fields_to_write", len(fieldValues)).
+		Info("Writing Jobber job details to Paperless custom fields")
+
+	if err := app.Client.UpsertDocumentCustomFields(ctx, documentID, fieldValues, app.Database); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func mergeSettingsPatch(current Settings, patch map[string]interface{}) (Settings, error) {

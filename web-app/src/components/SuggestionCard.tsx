@@ -351,12 +351,19 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
               integrationResult?.jobber_error ||
               integrationResult?.jobber_expense_error ||
               integrationResult?.google_drive_uploaded ||
-              integrationResult?.google_drive_error) && (
+              integrationResult?.google_drive_error ||
+              (integrationResult && integrationResult.paperless_updated && integrationResult.jobber_applied === false && !integrationResult.jobber_error)) && (
               <div className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
                 <h4 className="font-semibold text-gray-700 dark:text-gray-300">Last apply result</h4>
                 {integrationResult?.jobber_applied && (
                   <p className="mt-1 text-green-700 dark:text-green-300">
-                    Jobber fields saved to Paperless.
+                    Jobber fields saved to Paperless custom fields.
+                  </p>
+                )}
+                {integrationResult && integrationResult.paperless_updated && integrationResult.jobber_applied === false && !integrationResult.jobber_error && (
+                  <p className="mt-1 text-amber-700 dark:text-amber-300">
+                    Jobber job was selected but no custom field mappings are configured — nothing was written to Paperless.
+                    Go to <strong>Settings → Integrations → Jobber → Job matching</strong> to map Jobber fields to Paperless custom fields.
                   </p>
                 )}
                 {integrationResult?.jobber_expense_created && (
@@ -369,12 +376,12 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 )}
                 {integrationResult?.jobber_error && (
                   <p className="mt-1 text-red-700 dark:text-red-300">
-                    Jobber: {integrationResult.jobber_error}
+                    Jobber field mapping error: {integrationResult.jobber_error}
                   </p>
                 )}
                 {integrationResult?.jobber_expense_error && (
                   <p className="mt-1 text-red-700 dark:text-red-300">
-                    Jobber expense: {integrationResult.jobber_expense_error}
+                    Jobber expense error: {integrationResult.jobber_expense_error}
                   </p>
                 )}
                 {integrationResult?.google_drive_uploaded && (

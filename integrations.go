@@ -706,17 +706,54 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 		} `json:"errors"`
 	}
 
+	requestSummary := fmt.Sprintf("job=%s title=%s", candidate.ID, title)
+
 	if err := executeJSONGraphQL(ctx, "https://api.getjobber.com/api/graphql", validConn.AccessToken, mutation, map[string]interface{}{"input": input}, &response); err != nil {
+		insertIntegrationActionLog(s.DB.WithContext(ctx), &IntegrationActionLog{
+			DocumentID:     suggestion.ID,
+			Provider:       integrationProviderJobber,
+			ActionType:     "expense_create",
+			Status:         "error",
+			RequestSummary: requestSummary,
+			ErrorMessage:   err.Error(),
+		})
 		return nil, err
 	}
 	if len(response.Errors) > 0 {
-		return nil, fmt.Errorf("jobber graphql error: %s", response.Errors[0].Message)
+		errMsg := fmt.Sprintf("jobber graphql error: %s", response.Errors[0].Message)
+		insertIntegrationActionLog(s.DB.WithContext(ctx), &IntegrationActionLog{
+			DocumentID:     suggestion.ID,
+			Provider:       integrationProviderJobber,
+			ActionType:     "expense_create",
+			Status:         "error",
+			RequestSummary: requestSummary,
+			ErrorMessage:   errMsg,
+		})
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 	if len(response.Data.ExpenseCreate.UserErrors) > 0 {
-		return nil, fmt.Errorf("jobber expense create error: %s", response.Data.ExpenseCreate.UserErrors[0].Message)
+		errMsg := fmt.Sprintf("jobber expense create error: %s", response.Data.ExpenseCreate.UserErrors[0].Message)
+		insertIntegrationActionLog(s.DB.WithContext(ctx), &IntegrationActionLog{
+			DocumentID:     suggestion.ID,
+			Provider:       integrationProviderJobber,
+			ActionType:     "expense_create",
+			Status:         "error",
+			RequestSummary: requestSummary,
+			ErrorMessage:   errMsg,
+		})
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 	if response.Data.ExpenseCreate.Expense == nil {
-		return nil, fmt.Errorf("jobber expense create returned no expense")
+		errMsg := "jobber expense create returned no expense"
+		insertIntegrationActionLog(s.DB.WithContext(ctx), &IntegrationActionLog{
+			DocumentID:     suggestion.ID,
+			Provider:       integrationProviderJobber,
+			ActionType:     "expense_create",
+			Status:         "error",
+			RequestSummary: requestSummary,
+			ErrorMessage:   errMsg,
+		})
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	expenseID := response.Data.ExpenseCreate.Expense.ID
@@ -732,7 +769,7 @@ func (s *IntegrationsService) CreateJobberExpense(ctx context.Context, client Cl
 		ActionType:      "expense_create",
 		Status:          "success",
 		ExternalID:      expenseID,
-		RequestSummary:  fmt.Sprintf("job=%s title=%s", candidate.ID, title),
+		RequestSummary:  requestSummary,
 		ResponseSummary: expenseID,
 	})
 

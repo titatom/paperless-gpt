@@ -428,6 +428,7 @@ func main() {
 		api.GET("/settings", app.getSettingsHandler)
 		api.POST("/settings", app.updateSettingsHandler)
 		api.GET("/integrations", app.getIntegrationsStatusHandler)
+		api.GET("/integrations/action-log", app.getIntegrationActionLogHandler)
 		api.GET("/integrations/:provider/status", app.getIntegrationStatusHandler)
 		api.POST("/integrations/:provider/connect/start", app.startIntegrationConnectHandler)
 		api.GET("/integrations/:provider/oauth/callback", app.integrationOAuthCallbackHandler)
