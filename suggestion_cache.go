@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,8 @@ const (
 
 	integrationCandidateProviderJobber = "jobber"
 )
+
+var suggestionGenerationLocks sync.Map
 
 type suggestionCacheMetadata struct {
 	Provider       string `json:"provider"`
@@ -75,17 +78,46 @@ func stableHash(value interface{}) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func canonicalStringSlice(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	sort.Strings(result)
+	return result
+}
+
+func canonicalCustomFields(fields []CustomFieldResponse) []CustomFieldResponse {
+	result := append([]CustomFieldResponse(nil), fields...)
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].Field != result[j].Field {
+			return result[i].Field < result[j].Field
+		}
+		return fmt.Sprint(result[i].Value) < fmt.Sprint(result[j].Value)
+	})
+	return result
+}
+
+func canonicalIntSlice(values []int) []int {
+	result := append([]int(nil), values...)
+	sort.Ints(result)
+	return result
+}
+
 func suggestionSourceHash(doc Document, req GenerateSuggestionsRequest, metadata suggestionCacheMetadata) string {
 	settingsMutex.RLock()
 	cacheSettings := map[string]interface{}{
 		"custom_fields_enable":                settings.CustomFieldsEnable,
-		"custom_fields_selected_ids":          settings.CustomFieldsSelectedIDs,
+		"custom_fields_selected_ids":          canonicalIntSlice(settings.CustomFieldsSelectedIDs),
 		"custom_fields_write_mode":            settings.CustomFieldsWriteMode,
 		"restrict_tags_to_existing":           settings.RestrictTagsToExisting,
 		"restrict_correspondents_to_existing": settings.RestrictCorrespondentsToExisting,
 		"restrict_document_types_to_existing": settings.RestrictDocumentTypesToExisting,
 		"create_new_tags":                     createNewTags,
-		"correspondent_black_list":            correspondentBlackList,
+		"correspondent_black_list":            canonicalStringSlice(correspondentBlackList),
 	}
 	settingsMutex.RUnlock()
 
@@ -94,11 +126,11 @@ func suggestionSourceHash(doc Document, req GenerateSuggestionsRequest, metadata
 			"id":                 doc.ID,
 			"title":              doc.Title,
 			"content":            doc.Content,
-			"tags":               doc.Tags,
+			"tags":               canonicalStringSlice(doc.Tags),
 			"correspondent":      doc.Correspondent,
 			"created_date":       doc.CreatedDate,
 			"document_type_name": doc.DocumentTypeName,
-			"custom_fields":      doc.CustomFields,
+			"custom_fields":      canonicalCustomFields(doc.CustomFields),
 		},
 		"request": map[string]bool{
 			"generate_titles":         req.GenerateTitles,
@@ -190,6 +222,12 @@ func (app *App) generateDocumentSuggestionsCached(ctx context.Context, req Gener
 	}
 
 	if len(misses) > 0 {
+		locked, unlock := acquireSuggestionGenerationLocks(misses, req, metadata)
+		defer unlock()
+		misses = locked
+		if len(misses) == 0 {
+			return app.generateDocumentSuggestionsCached(ctx, req, logger)
+		}
 		missReq := req
 		missReq.Documents = misses
 		missReq.Regenerate = false
@@ -221,13 +259,65 @@ func (app *App) invalidateDocumentSuggestionCache(ctx context.Context, documentI
 }
 
 func (app *App) enqueueSuggestionJob(ctx context.Context, documentID int, sourceHash string) error {
+	db := app.Database.WithContext(ctx)
+	var existing SuggestionJob
+	query := db.Where("document_id = ? AND status IN ?", documentID, []string{suggestionJobStatusPending, suggestionJobStatusFailed, suggestionJobStatusRunning})
+	if strings.TrimSpace(sourceHash) != "" {
+		query = query.Where("source_hash = ?", sourceHash)
+	}
+	err := query.Order("created_at DESC").First(&existing).Error
+	if err == nil {
+		if existing.Status != suggestionJobStatusRunning {
+			existing.Status = suggestionJobStatusPending
+			existing.NextAttemptAt = time.Now()
+			existing.LastError = ""
+			if strings.TrimSpace(sourceHash) != "" {
+				existing.SourceHash = sourceHash
+			}
+			return db.Save(&existing).Error
+		}
+		return nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return err
+	}
 	job := SuggestionJob{
 		DocumentID:    documentID,
 		SourceHash:    sourceHash,
 		Status:        suggestionJobStatusPending,
 		NextAttemptAt: time.Now(),
 	}
-	return app.Database.WithContext(ctx).Create(&job).Error
+	return db.Create(&job).Error
+}
+
+func acquireSuggestionGenerationLocks(documents []Document, req GenerateSuggestionsRequest, metadata suggestionCacheMetadata) ([]Document, func()) {
+	type acquiredLock struct {
+		key string
+		ch  chan struct{}
+	}
+	locked := make([]Document, 0, len(documents))
+	acquired := make([]acquiredLock, 0, len(documents))
+	for _, doc := range documents {
+		key := suggestionSourceHash(doc, req, metadata)
+		ch := make(chan struct{})
+		actual, loaded := suggestionGenerationLocks.LoadOrStore(key, ch)
+		if loaded {
+			if existing, ok := actual.(chan struct{}); ok {
+				<-existing
+			}
+			continue
+		}
+		locked = append(locked, doc)
+		acquired = append(acquired, acquiredLock{key: key, ch: ch})
+	}
+	return locked, func() {
+		for _, lock := range acquired {
+			if actual, ok := suggestionGenerationLocks.Load(lock.key); ok && actual == lock.ch {
+				suggestionGenerationLocks.Delete(lock.key)
+				close(lock.ch)
+			}
+		}
+	}
 }
 
 func integrationMatchHash(provider string, value interface{}) string {

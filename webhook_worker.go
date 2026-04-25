@@ -18,8 +18,11 @@ import (
 )
 
 const (
-	paperlessWebhookProvider = "paperless"
-	paperlessSignatureHeader = "X-Paperless-Signature"
+	paperlessWebhookProvider     = "paperless"
+	paperlessSignatureHeader     = "X-Paperless-Signature"
+	paperlessStaticSecretHeader  = "X-Paperless-GPT-Secret"
+	suggestionJobStaleAfter      = 15 * time.Minute
+	suggestionJobMaxRetryBackoff = 30 * time.Minute
 )
 
 type paperlessWebhookPayload struct {
@@ -45,7 +48,7 @@ func (app *App) paperlessWebhookHandler(c *gin.Context) {
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 
-	if !validWebhookSignature(c.GetHeader(paperlessSignatureHeader), body, secret) {
+	if !validWebhookAuthentication(c, body, secret) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid webhook signature"})
 		return
 	}
@@ -88,6 +91,16 @@ func (app *App) paperlessWebhookHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "queued", "document_id": documentID})
+}
+
+func validWebhookAuthentication(c *gin.Context, body []byte, secret string) bool {
+	if strings.TrimSpace(secret) == "" {
+		return false
+	}
+	if provided := strings.TrimSpace(c.GetHeader(paperlessStaticSecretHeader)); provided != "" {
+		return hmac.Equal([]byte(provided), []byte(secret))
+	}
+	return validWebhookSignature(c.GetHeader(paperlessSignatureHeader), body, secret)
 }
 
 func validWebhookSignature(header string, body []byte, secret string) bool {
@@ -159,6 +172,9 @@ func (app *App) startSuggestionWorker(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				if err := app.recoverStaleSuggestionJobs(ctx); err != nil {
+					log.WithError(err).Warn("Suggestion worker failed to recover stale jobs")
+				}
 				if err := app.processNextSuggestionJob(ctx); err != nil {
 					log.WithError(err).Warn("Suggestion worker failed to process a job")
 				}
@@ -170,7 +186,7 @@ func (app *App) startSuggestionWorker(ctx context.Context) {
 func (app *App) processNextSuggestionJob(ctx context.Context) error {
 	db := app.Database.WithContext(ctx)
 	var job SuggestionJob
-	err := db.Where("status = ? AND next_attempt_at <= ?", suggestionJobStatusPending, time.Now()).
+	err := db.Where("status IN ? AND next_attempt_at <= ?", []string{suggestionJobStatusPending, suggestionJobStatusFailed}, time.Now()).
 		Order("created_at ASC").
 		First(&job).Error
 	if err != nil {
@@ -210,11 +226,28 @@ func (app *App) processNextSuggestionJob(ctx context.Context) error {
 		job.Status = suggestionJobStatusFailed
 		job.AttemptCount++
 		job.LastError = err.Error()
-		job.NextAttemptAt = time.Now().Add(time.Duration(job.AttemptCount+1) * time.Minute)
+		backoff := time.Duration(job.AttemptCount+1) * time.Minute
+		if backoff > suggestionJobMaxRetryBackoff {
+			backoff = suggestionJobMaxRetryBackoff
+		}
+		job.NextAttemptAt = time.Now().Add(backoff)
 	} else {
 		job.Status = suggestionJobStatusSucceeded
 		job.LastError = ""
 		job.NextAttemptAt = time.Now()
 	}
 	return db.Save(&job).Error
+}
+
+func (app *App) recoverStaleSuggestionJobs(ctx context.Context) error {
+	cutoff := time.Now().Add(-suggestionJobStaleAfter)
+	return app.Database.WithContext(ctx).
+		Model(&SuggestionJob{}).
+		Where("status = ? AND started_at IS NOT NULL AND started_at < ?", suggestionJobStatusRunning, cutoff).
+		Updates(map[string]interface{}{
+			"status":          suggestionJobStatusPending,
+			"started_at":      nil,
+			"next_attempt_at": time.Now(),
+			"last_error":      "worker stopped before finishing; retrying",
+		}).Error
 }

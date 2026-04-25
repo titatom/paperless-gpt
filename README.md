@@ -991,7 +991,12 @@ Paperless GPT can receive Paperless-ngx webhook events at:
 https://your-paperless-gpt-host/api/paperless/webhook
 ```
 
-Configure the shared secret under **Settings -> Integrations -> Paperless webhook**. Paperless GPT verifies the `X-Paperless-Signature` HMAC-SHA256 signature before enqueueing work. The webhook only pre-generates cached suggestions for tagged documents; it never applies metadata changes. If no webhook secret is configured, the existing polling fallback remains active.
+Configure the shared secret under **Settings -> Integrations -> Paperless webhook**. Paperless GPT accepts either:
+
+- `X-Paperless-GPT-Secret: <shared secret>` for Paperless-ngx webhook actions that can set custom headers, or
+- `X-Paperless-Signature: sha256=<hmac>` where the HMAC-SHA256 is computed over the raw request body using the shared secret.
+
+The webhook only pre-generates cached suggestions for tagged documents; it never applies metadata changes. If no webhook secret is configured, the existing polling fallback remains active.
 
 4. **OCR Processing**
    - Tag documents with appropriate OCR tag to process them

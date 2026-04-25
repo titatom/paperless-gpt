@@ -628,29 +628,6 @@ func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Fetch the full Jobber job list once — all documents share the same universe
-	// of candidates, so making one round of paginated API calls is enough.
-	allCandidates, err := app.Integrations.FetchAllJobberCandidates(ctx)
-	if err != nil {
-		log.WithError(err).
-			WithField("document_count", len(req.DocumentIDs)).
-			Error("jobberMatchCandidatesHandler: failed to fetch Jobber candidates")
-		status := http.StatusInternalServerError
-		errorCode := "jobber_fetch_failed"
-		if errors.Is(err, errJobberNotConnected) {
-			status = http.StatusBadGateway
-			errorCode = "jobber_not_connected"
-		} else if errors.Is(err, errJobberAuthFailed) {
-			status = http.StatusBadGateway
-			errorCode = "jobber_auth_failed"
-		}
-		c.JSON(status, gin.H{
-			"error": fmt.Sprintf("error fetching Jobber jobs: %v", err),
-			"code":  errorCode,
-		})
-		return
-	}
-
 	// Build a lookup map from the documents provided inline (avoids extra Paperless API calls).
 	docByID := make(map[int]Document, len(req.Documents))
 	for _, d := range req.Documents {
@@ -691,10 +668,60 @@ func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 		}
 	}
 
-	// Rank the shared candidate list per document in memory — no more API calls.
+	// Serve cached ranked lists first. Any misses share one Jobber API fetch.
 	results := make(map[int][]JobberMatchCandidate, len(req.DocumentIDs))
 	autoSelected := make(map[int]string, len(req.DocumentIDs))
+	misses := make([]int, 0)
 	for _, id := range req.DocumentIDs {
+		doc, ok := docByID[id]
+		if !ok {
+			continue
+		}
+		preferred := req.SuggestedCreatedDates[strconv.Itoa(id)]
+		matchHash := jobberCandidateMatchHash(doc, preferred)
+		var cached []JobberMatchCandidate
+		cachedAuto, hit, err := app.getCachedIntegrationCandidates(ctx, id, integrationCandidateProviderJobber, matchHash, &cached)
+		if err != nil {
+			log.WithError(err).WithField("document_id", id).Warn("Failed to read cached Jobber candidates; refetching")
+		}
+		if hit {
+			results[id] = cached
+			if cachedAuto != "" {
+				autoSelected[id] = cachedAuto
+			}
+			continue
+		}
+		misses = append(misses, id)
+	}
+
+	var allCandidates []JobberMatchCandidate
+	if len(misses) > 0 {
+		var err error
+		// Fetch the full Jobber job list once — all documents share the same universe
+		// of candidates, so making one round of paginated API calls is enough.
+		allCandidates, err = app.Integrations.FetchAllJobberCandidates(ctx)
+		if err != nil {
+			log.WithError(err).
+				WithField("document_count", len(req.DocumentIDs)).
+				Error("jobberMatchCandidatesHandler: failed to fetch Jobber candidates")
+			status := http.StatusInternalServerError
+			errorCode := "jobber_fetch_failed"
+			if errors.Is(err, errJobberNotConnected) {
+				status = http.StatusBadGateway
+				errorCode = "jobber_not_connected"
+			} else if errors.Is(err, errJobberAuthFailed) {
+				status = http.StatusBadGateway
+				errorCode = "jobber_auth_failed"
+			}
+			c.JSON(status, gin.H{
+				"error": fmt.Sprintf("error fetching Jobber jobs: %v", err),
+				"code":  errorCode,
+			})
+			return
+		}
+	}
+
+	for _, id := range misses {
 		doc, ok := docByID[id]
 		if !ok {
 			results[id] = allCandidates
@@ -706,9 +733,20 @@ func (app *App) jobberMatchCandidatesHandler(c *gin.Context) {
 		if ranked.AutoSelectedID != "" {
 			autoSelected[id] = ranked.AutoSelectedID
 		}
+		matchHash := jobberCandidateMatchHash(doc, preferred)
+		if err := app.saveIntegrationCandidates(ctx, id, integrationCandidateProviderJobber, matchHash, ranked.Candidates, ranked.AutoSelectedID); err != nil {
+			log.WithError(err).WithField("document_id", id).Warn("Failed to cache Jobber candidates")
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"candidates": results, "auto_selected": autoSelected})
+}
+
+func jobberCandidateMatchHash(doc Document, preferredDate string) string {
+	return integrationMatchHash(integrationCandidateProviderJobber, map[string]interface{}{
+		"document_created_date":  doc.CreatedDate,
+		"suggested_created_date": strings.TrimSpace(preferredDate),
+	})
 }
 
 func currentBaseURL(c *gin.Context) string {
