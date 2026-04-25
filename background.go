@@ -45,6 +45,10 @@ func StartBackgroundTasks(ctx context.Context, app BackgroundProcessor) {
 					count += ocrCount
 				}
 
+				if autoTag != "" {
+					log.Warnf("The AUTO_TAG auto-apply workflow (%s) is deprecated and will be removed in a future release. Use the manual review workflow with webhook/preprocessing instead.", autoTag)
+				}
+
 				// Run auto-tagging after OCR
 				autoCount, err := app.processAutoTagDocuments(ctx)
 				if err != nil {
