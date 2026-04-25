@@ -139,6 +139,7 @@ type Settings struct {
 	GoogleDriveEnabled               bool   `json:"google_drive_enabled"`
 	GoogleDriveFolderID              string `json:"google_drive_folder_id"`
 	QuickBooksEnabled                bool   `json:"quickbooks_enabled"`
+	PaperlessWebhookSecret           string `json:"paperless_webhook_secret,omitempty"`
 }
 
 // DocumentSuggestion is the response payload for /generate-suggestions endpoint and the request payload for /update-documents endpoint (as an array)

@@ -115,6 +115,24 @@ func (app *App) getWebhookSecret(ctx context.Context, provider string) (string, 
 	return record.Secret, nil
 }
 
+func (app *App) upsertWebhookSecret(ctx context.Context, provider, secret string) error {
+	db := app.Database.WithContext(ctx)
+	var record WebhookSecret
+	err := db.Where("provider = ?", provider).First(&record).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	if err == gorm.ErrRecordNotFound {
+		record = WebhookSecret{Provider: provider}
+	}
+	record.Secret = secret
+	record.Enabled = true
+	if record.ID == 0 {
+		return db.Create(&record).Error
+	}
+	return db.Save(&record).Error
+}
+
 func (app *App) isWebhookConfigured(ctx context.Context, provider string) bool {
 	_, err := app.getWebhookSecret(ctx, provider)
 	return err == nil

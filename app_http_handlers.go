@@ -128,14 +128,21 @@ func (app *App) getSettingsHandler(c *gin.Context) {
 	go refreshCustomFieldsCache(app.Client)
 
 	settingsMutex.RLock()
-	defer settingsMutex.RUnlock()
+	settingsCopy := settings
+	settingsMutex.RUnlock()
 	customFieldsCacheMu.RLock()
 	defer customFieldsCacheMu.RUnlock()
 
+	settingsCopy.PaperlessWebhookSecret = ""
+	webhookConfigured := app.isWebhookConfigured(c.Request.Context(), paperlessWebhookProvider)
+
 	// Create a response that includes both settings and custom fields
 	response := gin.H{
-		"settings":      settings,
+		"settings":      settingsCopy,
 		"custom_fields": customFieldsCache,
+		"webhooks": gin.H{
+			"paperless_configured": webhookConfigured,
+		},
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -156,6 +163,8 @@ func (app *App) updateSettingsHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	webhookSecret := strings.TrimSpace(merged.PaperlessWebhookSecret)
+	merged.PaperlessWebhookSecret = ""
 
 	settings = merged
 
@@ -164,6 +173,12 @@ func (app *App) updateSettingsHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save settings"})
 		log.Errorf("Failed to save settings: %v", err)
 		return
+	}
+	if webhookSecret != "" {
+		if err := app.upsertWebhookSecret(c.Request.Context(), paperlessWebhookProvider, webhookSecret); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save Paperless webhook secret"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Settings saved successfully"})
