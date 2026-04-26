@@ -208,7 +208,7 @@ func TestUpdateDocumentsApplyJobberFalseSkipsJobberActions(t *testing.T) {
 		settingsMutex.Unlock()
 	})
 
-	client := &mockPaperlessClient{}
+	client := &updateDocumentsMockClient{}
 	app := &App{
 		Client:       client,
 		Database:     db,
@@ -254,7 +254,7 @@ func TestUpdateDocumentsApplyJobberTrueWritesFields(t *testing.T) {
 		settingsMutex.Unlock()
 	})
 
-	client := &mockPaperlessClient{}
+	client := &updateDocumentsMockClient{}
 	app := &App{
 		Client:       client,
 		Database:     db,

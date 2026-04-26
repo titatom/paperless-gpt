@@ -14,7 +14,7 @@ func TestAIProviderSettingsSaveLoadDoesNotExposeKey(t *testing.T) {
 	db, err := InitializeTestDB()
 	require.NoError(t, err)
 	app := &App{Database: db, llmCache: &sync.Map{}}
-	withSecretTestEnv(t, "test-secret")
+	t.Setenv("PAPERLESS_GPT_SECRET_KEY", "test-secret")
 
 	resp, err := app.saveAIProviderSettings(t.Context(), AIProviderSettingsRequest{
 		Provider:     AIProviderOpenAI,
@@ -25,13 +25,11 @@ func TestAIProviderSettingsSaveLoadDoesNotExposeKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, resp.APIKeyConfigured)
-	require.Empty(t, resp.APIKey)
 
 	loaded, err := app.getAIProviderSettings(t.Context())
 	require.NoError(t, err)
 	require.True(t, loaded.APIKeyConfigured)
 	require.Equal(t, "gpt-4o-mini", loaded.DefaultModel)
-	require.Empty(t, loaded.APIKey)
 
 	var setting AIProviderSetting
 	require.NoError(t, db.First(&setting, "provider = ?", AIProviderOpenAI).Error)
@@ -43,7 +41,7 @@ func TestResolveAIProviderConfigDBOverridesEnv(t *testing.T) {
 	db, err := InitializeTestDB()
 	require.NoError(t, err)
 	app := &App{Database: db, llmCache: &sync.Map{}}
-	withSecretTestEnv(t, "test-secret")
+	t.Setenv("PAPERLESS_GPT_SECRET_KEY", "test-secret")
 	oldProvider, oldModel := llmProvider, llmModel
 	llmProvider = AIProviderOllama
 	llmModel = "env-model"

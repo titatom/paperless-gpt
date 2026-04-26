@@ -1042,16 +1042,6 @@ func createLLM() (llms.Model, error) {
 
 		// Apply rate limiting with isVision=false
 		return NewRateLimitedLLM(llm, getRateLimitConfig(false)), nil
-	case "openrouter":
-		cfg := &AIProviderConfig{
-			Provider:     AIProviderOpenRouter,
-			BaseURL:      defaultBaseURLForProvider(AIProviderOpenRouter),
-			APIKey:       os.Getenv("OPENROUTER_API_KEY"),
-			DefaultModel: strings.TrimSpace(llmModel),
-			TaskModels:   map[string]string{},
-			Source:       "env",
-		}
-		return buildLLMFromConfig(context.Background(), cfg, llmModel)
 	case "ollama":
 		host := os.Getenv("OLLAMA_HOST")
 		if host == "" {

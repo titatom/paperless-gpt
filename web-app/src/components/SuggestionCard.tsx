@@ -500,7 +500,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 {integrationResult && integrationResult.paperless_updated && integrationResult.jobber_applied === false && !integrationResult.jobber_error && (
                   <p className="mt-1 text-amber-700 dark:text-amber-300">
                     Jobber job was selected but no custom field mappings are configured - nothing was written to Paperless.
-                    Go to <strong>Settings -> Integrations -> Jobber -> Job matching</strong> to map Jobber fields to Paperless custom fields.
+                    Go to <strong>Settings {"->"} Integrations {"->"} Jobber {"->"} Job matching</strong> to map Jobber fields to Paperless custom fields.
                   </p>
                 )}
                 {integrationResult?.jobber_expense_created && (
