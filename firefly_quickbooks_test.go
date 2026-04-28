@@ -330,6 +330,33 @@ func TestParseQuickBooksAttachableID(t *testing.T) {
 	}
 }
 
+func TestFormatQuickBooksUploadErrorMapsApplicationAuthorizationFailed(t *testing.T) {
+	raw := []byte(`{"fault":{"error":[{"message":"message=ApplicationAuthorizationFailed; errorCode=003100; statusCode=403","code":"3100"}]}}`)
+	err := quickBooksReceiptUploadError(http.StatusForbidden, raw)
+
+	if !isQuickBooksAuthorizationFailed(raw) {
+		t.Fatalf("expected authorization failure classification")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "reconnect quickbooks") {
+		t.Fatalf("expected reconnect guidance, got %v", err)
+	}
+	if strings.Contains(err.Error(), `"fault"`) {
+		t.Fatalf("expected user-facing message without raw payload, got %v", err)
+	}
+}
+
+func TestFormatQuickBooksUploadErrorKeepsUnexpectedPayload(t *testing.T) {
+	raw := []byte(`{"fault":{"error":[{"message":"other failure","code":"9999"}]}}`)
+	err := quickBooksReceiptUploadError(http.StatusBadRequest, raw)
+
+	if isQuickBooksAuthorizationFailed(raw) {
+		t.Fatalf("unexpected authorization classification for %s", raw)
+	}
+	if !strings.Contains(err.Error(), "other failure") {
+		t.Fatalf("expected original payload for unexpected error, got %v", err)
+	}
+}
+
 func readAllString(t *testing.T, reader io.Reader) string {
 	t.Helper()
 	body, err := io.ReadAll(reader)
