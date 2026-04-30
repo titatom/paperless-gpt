@@ -366,19 +366,19 @@ func TestDefaultSettingsUseQuickBooksProduction(t *testing.T) {
 	}
 }
 
-func TestQuickBooksReceiptsBaseURLUsesSandboxWhenConfigured(t *testing.T) {
+func TestQuickBooksAttachmentsBaseURLUsesSandboxWhenConfigured(t *testing.T) {
 	withQuickBooksEnvironment(t, quickBooksEnvironmentSandbox)
 
-	if got := quickBooksReceiptsBaseURL(); got != quickBooksSandboxReceiptsURL {
-		t.Fatalf("expected sandbox receipts URL, got %q", got)
+	if got := quickBooksAttachmentsBaseURL(); got != quickBooksSandboxAttachmentsURL {
+		t.Fatalf("expected sandbox attachments URL, got %q", got)
 	}
 }
 
-func TestQuickBooksReceiptsBaseURLDefaultsToProduction(t *testing.T) {
+func TestQuickBooksAttachmentsBaseURLDefaultsToProduction(t *testing.T) {
 	withQuickBooksEnvironment(t, "")
 
-	if got := quickBooksReceiptsBaseURL(); got != quickBooksProductionReceiptsURL {
-		t.Fatalf("expected production receipts URL, got %q", got)
+	if got := quickBooksAttachmentsBaseURL(); got != quickBooksProductionAttachmentsURL {
+		t.Fatalf("expected production attachments URL, got %q", got)
 	}
 }
 

@@ -612,7 +612,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                     ? "Connect QuickBooks in Settings to enable receipt uploads."
                     : !quickBooksReceiptUploadEnabled
                       ? "Enable QuickBooks receipt uploads in Settings -> Integrations first."
-                      : "Uploads the Paperless PDF as a QuickBooks attachment. It will not appear in the Receipts inbox unless Intuit supports that workflow separately."}
+                      : "Uploads the Paperless PDF as a QuickBooks attachment. Find it in QuickBooks via Settings -> Attachments, not the Receipts inbox."}
                 </p>
               </div>
             </div>

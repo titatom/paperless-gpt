@@ -812,7 +812,7 @@ const IntegrationsEditor: React.FC = () => {
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Receipt upload creates a QuickBooks attachment from the Paperless PDF. It does not create or populate the QuickBooks Receipts inbox;
-            direct Bill or Purchase creation/linking is future work.
+            look under QuickBooks' attachment list, or link the attachment to a transaction in QuickBooks. Direct Bill or Purchase creation/linking is future work.
             {statuses.quickbooks?.connected && !statuses.quickbooks.account_id ? ' Realm ID is missing; reconnect QuickBooks before uploading receipts.' : ''}
           </p>
         </IntegrationCard>

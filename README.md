@@ -343,7 +343,7 @@ Paperless GPT 0.7.0 adds explicit, per-document finance actions under **Settings
 
 - QuickBooks continues to use OAuth from **Settings -> Integrations**.
 - Enable **receipt upload** to show a per-document **Upload receipt to QuickBooks** checkbox.
-- Upload sends the Paperless PDF through QuickBooks' Attachable upload API as an unattached receipt attachment. It does not place files in the QuickBooks Receipts inbox/OCR review flow.
+- Upload sends the Paperless PDF through QuickBooks' Attachable upload API as an unattached receipt attachment. Look for it under QuickBooks Settings -> Lists -> Attachments; it does not place files in the QuickBooks Receipts inbox/OCR review flow.
 - 0.7.0 does not create QuickBooks Bills or Purchases directly. Direct accounting object creation is future work.
 - If receipt upload returns Intuit `ApplicationAuthorizationFailed` / code `3100`, reconnect QuickBooks from **Settings -> Integrations**. This usually means the saved token is no longer authorized for the selected company, the app credentials changed after connection, or the wrong QuickBooks realm/company was connected.
 
