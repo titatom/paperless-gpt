@@ -752,7 +752,7 @@ func quickBooksReceiptUploadError(statusCode int, raw []byte) error {
 }
 
 func quickBooksUploadURL(realmID string) string {
-	return fmt.Sprintf("%s/v3/company/%s/upload", quickBooksAPIBaseURL(), url.PathEscape(realmID))
+	return fmt.Sprintf("%s/v3/company/%s/upload?minorversion=75", quickBooksAPIBaseURL(), url.PathEscape(realmID))
 }
 
 func quickBooksAPIBaseURL() string {

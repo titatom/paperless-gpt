@@ -612,7 +612,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                     ? "Connect QuickBooks in Settings to enable receipt uploads."
                     : !quickBooksReceiptUploadEnabled
                       ? "Enable QuickBooks receipt uploads in Settings -> Integrations first."
-                      : "Uploads the Paperless PDF to QuickBooks Receipts for Intuit matching/OCR."}
+                      : "Uploads the Paperless PDF as a QuickBooks attachment. It will not appear in the Receipts inbox unless Intuit supports that workflow separately."}
                 </p>
               </div>
             </div>
@@ -704,12 +704,12 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 )}
                 {integrationResult?.quickbooks_uploaded && (
                   <p className="mt-1 text-green-700 dark:text-green-300">
-                    QuickBooks receipt uploaded
+                    QuickBooks attachment uploaded
                     {integrationResult.quickbooks_url ? (
                       <>
                         {" "}
                         <a className="underline" href={integrationResult.quickbooks_url} target="_blank" rel="noopener noreferrer">
-                          Open Receipts
+                          Open QuickBooks
                         </a>
                       </>
                     ) : "."}

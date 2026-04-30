@@ -331,6 +331,16 @@ func TestQuickBooksAPIBaseURLUsesSandboxWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestQuickBooksUploadURLIncludesMinorVersion(t *testing.T) {
+	withQuickBooksEnvironment(t, quickBooksEnvironmentSandbox)
+
+	got := quickBooksUploadURL("realm/with space")
+	want := quickBooksSandboxAPIBaseURL + "/v3/company/realm%2Fwith%20space/upload?minorversion=75"
+	if got != want {
+		t.Fatalf("expected upload URL %q, got %q", want, got)
+	}
+}
+
 func TestNormalizeQuickBooksEnvironment(t *testing.T) {
 	if got := normalizeQuickBooksEnvironment(quickBooksEnvironmentSandbox); got != quickBooksEnvironmentSandbox {
 		t.Fatalf("expected sandbox, got %q", got)
