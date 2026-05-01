@@ -25,6 +25,7 @@ type externalAPIKeyStatusResponse struct {
 	Configured   bool   `json:"configured"`
 	Source       string `json:"source,omitempty"`
 	BaseURL      string `json:"base_url"`
+	LocalBaseURL string `json:"local_base_url,omitempty"`
 	OpenAPIURL   string `json:"openapi_url"`
 	HeaderName   string `json:"header_name"`
 	GeneratedKey string `json:"api_key,omitempty"`
@@ -227,10 +228,12 @@ func (app *App) recordExternalAPIKeyUse(ctx context.Context) {
 
 func (app *App) externalAPIKeyStatus(c *gin.Context) (externalAPIKeyStatusResponse, error) {
 	baseURL := strings.TrimRight(currentBaseURL(c), "/") + "/api/external/v1"
+	localBaseURL := externalAPIBaseURLFromOrigin(c.GetHeader("Origin"))
 	status := externalAPIKeyStatusResponse{
-		BaseURL:    baseURL,
-		OpenAPIURL: baseURL + "/openapi.json",
-		HeaderName: "X-API-Key",
+		BaseURL:      baseURL,
+		LocalBaseURL: localBaseURL,
+		OpenAPIURL:   baseURL + "/openapi.json",
+		HeaderName:   "X-API-Key",
 	}
 	if envExternalAPIKey() != "" {
 		status.Configured = true

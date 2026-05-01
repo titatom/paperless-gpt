@@ -925,6 +925,14 @@ func currentBaseURL(c *gin.Context) string {
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
+func externalAPIBaseURLFromOrigin(origin string) string {
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+	if !isAllowedExternalAPIOrigin(origin, nil) {
+		return ""
+	}
+	return origin + "/api/external/v1"
+}
+
 func getSelectedJobberCandidate(document DocumentSuggestion) (JobberMatchCandidate, bool) {
 	if document.SelectedJobberMatchID == "" {
 		return JobberMatchCandidate{}, false
