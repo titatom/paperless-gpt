@@ -96,6 +96,11 @@ func updatePromptsHandler(c *gin.Context) {
 		log.Errorf("Failed to write prompt file %s: %v", req.Filename, err)
 		return
 	}
+	if err := os.Chmod(promptPath, 0600); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to secure prompt file permissions"})
+		log.Errorf("Failed to chmod prompt file %s: %v", req.Filename, err)
+		return
+	}
 
 	// Reload templates to apply changes immediately
 	if err := loadTemplates(); err != nil {
