@@ -746,7 +746,7 @@ const IntegrationsEditor: React.FC = () => {
           />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              <span className="block">Instance URL</span>
+              <span className="block">Firefly III instance URL</span>
               <input className="mt-1.5 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200" value={settings.firefly_instance_url} onChange={(e) => handleSettingChange('firefly_instance_url', e.target.value)} placeholder="https://firefly.example.com" />
             </label>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
