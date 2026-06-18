@@ -750,7 +750,7 @@ const IntegrationsEditor: React.FC = () => {
               <input className="mt-1.5 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200" value={settings.firefly_instance_url} onChange={(e) => handleSettingChange('firefly_instance_url', e.target.value)} placeholder="https://firefly.example.com" />
             </label>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              <span className="block">Personal Access Token {settings.firefly_api_token_configured ? '(configured)' : ''}</span>
+              <span className="block">Firefly III Personal Access Token {settings.firefly_api_token_configured ? '(configured)' : ''}</span>
               <input type="password" className="mt-1.5 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200" value={settings.firefly_api_token} onChange={(e) => handleSettingChange('firefly_api_token', e.target.value)} placeholder={settings.firefly_api_token_configured ? 'Leave blank to keep existing token' : 'Firefly PAT'} />
             </label>
           </div>
