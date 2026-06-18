@@ -514,7 +514,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
                 />
                 <div>
                   <label htmlFor={`apply-firefly-${suggestion.id}`} className="font-medium text-gray-700 dark:text-gray-300">
-                    Apply Firefly III
+                    Apply Firefly III transaction draft
                   </label>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {!fireflyConnected
