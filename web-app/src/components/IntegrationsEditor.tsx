@@ -741,7 +741,7 @@ const IntegrationsEditor: React.FC = () => {
           showOAuthActions={false}
         >
           <SectionHeader
-            title="Personal Access Token"
+            title="Firefly III access token"
             description="Firefly uses a Personal Access Token and never OAuth. The token is encrypted at rest and only shown as configured after saving."
           />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
