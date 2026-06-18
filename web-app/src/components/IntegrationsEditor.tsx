@@ -756,7 +756,7 @@ const IntegrationsEditor: React.FC = () => {
           </div>
           <div className="mt-4 flex items-center gap-2">
             <input type="checkbox" id="fireflyEnabled" checked={settings.firefly_enabled} onChange={(e) => handleSettingChange('firefly_enabled', e.target.checked)} className="w-4 h-4" />
-            <label htmlFor="fireflyEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Firefly match/create/attach</label>
+            <label htmlFor="fireflyEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Firefly III transaction matching, creation, and attachments</label>
           </div>
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             <TextInput label="Default source account" value={settings.firefly_default_source_account} onChange={(v) => handleSettingChange('firefly_default_source_account', v)} />
