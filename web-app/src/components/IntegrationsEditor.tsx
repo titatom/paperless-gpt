@@ -764,7 +764,7 @@ const IntegrationsEditor: React.FC = () => {
             <TextInput label="Default currency" value={settings.firefly_default_currency} onChange={(v) => handleSettingChange('firefly_default_currency', v)} />
             <TextInput label="Default category" value={settings.firefly_default_category} onChange={(v) => handleSettingChange('firefly_default_category', v)} />
             <TextInput label="Default budget" value={settings.firefly_default_budget} onChange={(v) => handleSettingChange('firefly_default_budget', v)} />
-            <TextInput label="Notes template" value={settings.firefly_notes_template} onChange={(v) => handleSettingChange('firefly_notes_template', v)} />
+            <TextInput label="Firefly III notes template" value={settings.firefly_notes_template} onChange={(v) => handleSettingChange('firefly_notes_template', v)} />
           </div>
           <div className="mt-5">
             <SectionHeader title="Field mappings" description="Choose where Firefly transaction fields come from. Amount is required; if unmapped, Paperless GPT scans suggested custom fields named total, amount, or price." />
