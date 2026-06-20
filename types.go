@@ -187,6 +187,7 @@ type DocumentSuggestion struct {
 	FireflyCandidates            []FireflyTransactionCandidate `json:"firefly_candidates,omitempty"`
 	SelectedFireflyTransactionID string                        `json:"selected_firefly_transaction_id,omitempty"`
 	CreateFireflyTransaction     bool                          `json:"create_firefly_transaction,omitempty"`
+	FireflyDraft                 FireflyTransactionDraft       `json:"firefly_draft,omitempty"`
 	Cached                       bool                          `json:"cached,omitempty"`
 	GeneratedAt                  string                        `json:"generated_at,omitempty"`
 }
