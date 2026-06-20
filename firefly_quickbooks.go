@@ -630,26 +630,6 @@ func (s *IntegrationsService) attachFireflyPDF(ctx context.Context, cfg FireflyC
 }
 
 func buildFireflyAttachmentUpload(transactionID, filename string, content []byte) (io.Reader, string, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	fields := map[string]string{
-		"filename":        filename,
-		"attachable_type": "TransactionJournal",
-		"attachable_id":   transactionID,
-	}
-	for key, value := range fields {
-		if err := writer.WriteField(key, value); err != nil {
-			return nil, "", err
-		}
-	}
-	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, sanitizeMIMEFilename(filename)))
-	header.Set("Content-Type", "application/pdf")
-	part, err := writer.CreatePart(header)
-	if err != nil {
-
-func applyFireflyDraftToDerived(derived fireflyDerivedTransaction, draft FireflyTransactionDraft) fireflyDerivedTransaction {
-	if strings.TrimSpace(draft.Description) != "" {
 		derived.Description = strings.TrimSpace(draft.Description)
 	}
 	if strings.TrimSpace(draft.SourceAccount) != "" {
