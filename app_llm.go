@@ -605,6 +605,7 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 			var suggestedDocumentType string
 			var suggestedCreatedDate string
 			var suggestedCustomFields []CustomFieldSuggestion
+			var fireflyDraft FireflyTransactionDraft
 
 			// Each goroutine uses its own local err to avoid races on the shared outer variable.
 			var gerr error
