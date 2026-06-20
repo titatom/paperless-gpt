@@ -341,6 +341,7 @@ Paperless GPT 0.7.0 adds explicit, per-document finance actions under **Settings
 - Selected or newly created Firefly transactions receive the Paperless archive PDF as an attachment using Firefly's attachment API for the transaction journal.
 - Re-applying a document is duplicate-protected by searching for likely existing transactions before creating.
 - If the Firefly attachment upload fails, the apply result preserves the created or matched transaction ID so the document can be retried without ambiguity.
+- Firefly AI draft fields are advisory: they help prefill description, source/destination account, category, budget, and notes, while amount/date/matching stay deterministic.
 
 ### History and undo
 
