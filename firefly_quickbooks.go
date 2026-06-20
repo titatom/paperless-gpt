@@ -501,7 +501,9 @@ func (s *IntegrationsService) ApplyFirefly(ctx context.Context, client ClientInt
 	if err != nil {
 		return nil, err
 	}
-	derived = applyFireflyDraftToDerived(derived, suggestion.FireflyDraft)
+	if selectedID == "" {
+		derived = applyFireflyDraftToDerived(derived, suggestion.FireflyDraft)
+	}
 	result := &FireflyApplyResult{}
 	transactionID := selectedID
 	if transactionID != "" {
