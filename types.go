@@ -247,6 +247,18 @@ type FireflyTransactionCandidate struct {
 	MatchReason     string `json:"match_reason,omitempty"`
 }
 
+// FireflyTransactionDraft stores AI-assisted transaction metadata used when
+// creating a new Firefly III transaction from a Paperless document.
+type FireflyTransactionDraft struct {
+	Description     string `json:"description,omitempty"`
+	SourceAccount   string `json:"source_account,omitempty"`
+	DestinationAccount string `json:"destination_account,omitempty"`
+	Category        string `json:"category,omitempty"`
+	Budget          string `json:"budget,omitempty"`
+	Notes           string `json:"notes,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+}
+
 type DocumentIntegrationResult struct {
 	DocumentID                int    `json:"document_id"`
 	PaperlessUpdated          bool   `json:"paperless_updated"`
