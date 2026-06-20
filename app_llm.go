@@ -795,6 +795,7 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 			suggestion := DocumentSuggestion{
 				ID:               documentID,
 				OriginalDocument: doc,
+				FireflyDraft:      fireflyDraft,
 			}
 			settingsMutex.RLock()
 			suggestion.CustomFieldsWriteMode = settings.CustomFieldsWriteMode
