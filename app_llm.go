@@ -419,6 +419,87 @@ func (app *App) getSuggestedCreatedDate(ctx context.Context, title string, conte
 
 // getSuggestedCustomFields generates suggested custom fields for a document using the LLM.
 // allCustomFields must be pre-fetched by the caller to avoid redundant API calls per document.
+
+func (app *App) getSuggestedFireflyDraft(ctx context.Context, suggestion DocumentSuggestion, logger *logrus.Entry) (FireflyTransactionDraft, error) {
+	likelyLanguage := getLikelyLanguage()
+
+	templateMutex.RLock()
+	defer templateMutex.RUnlock()
+
+	settingsMutex.RLock()
+	availableAccounts := []string{}
+	if strings.TrimSpace(settings.FireflyDefaultSourceAccount) != "" {
+		availableAccounts = append(availableAccounts, settings.FireflyDefaultSourceAccount)
+	}
+	if strings.TrimSpace(settings.FireflyDefaultDestinationAccount) != "" && !strings.EqualFold(settings.FireflyDefaultDestinationAccount, settings.FireflyDefaultSourceAccount) {
+		availableAccounts = append(availableAccounts, settings.FireflyDefaultDestinationAccount)
+	}
+	availableCategory := strings.TrimSpace(settings.FireflyDefaultCategory)
+	availableBudget := strings.TrimSpace(settings.FireflyDefaultBudget)
+	availableCurrency := strings.TrimSpace(settings.FireflyDefaultCurrency)
+	amountFieldRef := strings.TrimSpace(settings.FireflyAmountFieldRef)
+	settingsMutex.RUnlock()
+
+	amount, amountString, _ := deriveFireflyAmount(suggestion, amountFieldRef)
+	prompt := fmt.Sprintf(`You are drafting Firefly III transaction metadata for a paperless-ngx document.
+Return JSON only with keys: description, source_account, destination_account, category, budget, notes, reason.
+Use the document amount/date as ground truth when present. Do not invent an amount or date.
+Prefer concise, human-readable descriptions and choose from existing accounts/categories when possible.
+If a field is uncertain, leave it blank instead of guessing.
+
+Language: %s
+Title: %s
+Correspondent: %s
+Document type: %s
+Created date: %s
+Amount: %s
+Currency: %s
+Available accounts: %v
+Default category: %s
+Default budget: %s
+Content excerpt: %s`,
+		likelyLanguage,
+		suggestion.SuggestedTitle,
+		suggestion.SuggestedCorrespondent,
+		suggestion.SuggestedDocumentType,
+		suggestion.SuggestedCreatedDate,
+		amountString,
+		firstNonEmpty(availableCurrency, suggestion.SuggestedDocumentType),
+		availableAccounts,
+		availableCategory,
+		availableBudget,
+		truncateForPrompt(suggestion.OriginalDocument.Content, 1200),
+	)
+	if logger != nil {
+		logger.Debugf("Firefly draft prompt: %s", prompt)
+	}
+
+	completion, err := app.generateTaskContent(ctx, TaskFireflyDraft, prompt, logger)
+	if err != nil {
+		return FireflyTransactionDraft{}, err
+	}
+	if len(completion.Choices) == 0 {
+		return FireflyTransactionDraft{}, fmt.Errorf("LLM returned no choices for Firefly draft suggestion")
+	}
+
+	draft := parseFireflyTransactionDraft(strings.TrimSpace(completion.Choices[0].Content))
+	draft = normalizeFireflyTransactionDraft(draft, suggestion)
+	if draft.Description == "" {
+		draft.Description = firstNonEmpty(suggestion.SuggestedTitle, suggestion.OriginalDocument.Title)
+	}
+	if draft.Notes == "" && amount > 0 {
+		draft.Notes = fmt.Sprintf("Document amount: %.2f", amount)
+	}
+	return draft, nil
+}
+
+func truncateForPrompt(content string, maxChars int) string {
+	content = strings.TrimSpace(content)
+	if len(content) <= maxChars {
+		return content
+	}
+	return content[:maxChars]
+}
 func (app *App) getSuggestedCustomFields(ctx context.Context, doc Document, selectedFieldIDs []int, allCustomFields []CustomField, logger *logrus.Entry) ([]CustomFieldSuggestion, error) {
 	// Filter to get only the selected custom fields
 	var selectedCustomFields []CustomField
