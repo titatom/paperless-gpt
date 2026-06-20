@@ -774,13 +774,13 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 			settingsMutex.RUnlock()
 			if fireflyEnabled {
 				fireflyDraft, gerr = app.getSuggestedFireflyDraft(ctx, DocumentSuggestion{
-					ID:               documentID,
-					OriginalDocument: doc,
-					SuggestedTitle:   suggestedTitle,
+					ID:                     documentID,
+					OriginalDocument:       doc,
+					SuggestedTitle:         suggestedTitle,
 					SuggestedCorrespondent: suggestedCorrespondent,
-					SuggestedDocumentType:  suggestedDocumentType,
-					SuggestedCreatedDate:   suggestedCreatedDate,
-					SuggestedCustomFields:  suggestedCustomFields,
+					SuggestedDocumentType:   suggestedDocumentType,
+					SuggestedCreatedDate:    suggestedCreatedDate,
+					SuggestedCustomFields:   suggestedCustomFields,
 				}, docLogger)
 				if gerr != nil {
 					mu.Lock()
