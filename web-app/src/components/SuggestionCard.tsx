@@ -503,6 +503,19 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
             </div>
 
             <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+              {suggestion.firefly_draft && (suggestion.firefly_draft.description || suggestion.firefly_draft.source_account || suggestion.firefly_draft.destination_account || suggestion.firefly_draft.category || suggestion.firefly_draft.budget || suggestion.firefly_draft.notes) && (
+                <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/30">
+                  <p className="font-medium text-blue-800 dark:text-blue-200">Firefly AI draft</p>
+                  <div className="mt-2 space-y-1 text-blue-900 dark:text-blue-100">
+                    {suggestion.firefly_draft.description && <p><strong>Description:</strong> {suggestion.firefly_draft.description}</p>}
+                    {suggestion.firefly_draft.source_account && <p><strong>Source account:</strong> {suggestion.firefly_draft.source_account}</p>}
+                    {suggestion.firefly_draft.destination_account && <p><strong>Destination account:</strong> {suggestion.firefly_draft.destination_account}</p>}
+                    {suggestion.firefly_draft.category && <p><strong>Category:</strong> {suggestion.firefly_draft.category}</p>}
+                    {suggestion.firefly_draft.budget && <p><strong>Budget:</strong> {suggestion.firefly_draft.budget}</p>}
+                    {suggestion.firefly_draft.notes && <p><strong>Notes:</strong> {suggestion.firefly_draft.notes}</p>}
+                  </div>
+                </div>
+              )}
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
