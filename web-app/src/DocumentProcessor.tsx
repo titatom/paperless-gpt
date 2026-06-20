@@ -72,6 +72,16 @@ export interface FireflyTransactionCandidate {
   match_reason?: string;
 }
 
+export interface FireflyTransactionDraft {
+  description?: string;
+  source_account?: string;
+  destination_account?: string;
+  category?: string;
+  budget?: string;
+  notes?: string;
+  reason?: string;
+}
+
 export interface DocumentIntegrationResult {
   document_id: number;
   paperless_updated: boolean;
