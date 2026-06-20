@@ -131,6 +131,7 @@ export interface DocumentSuggestion {
   firefly_candidates?: FireflyTransactionCandidate[];
   selected_firefly_transaction_id?: string;
   create_firefly_transaction?: boolean;
+  firefly_draft?: FireflyTransactionDraft;
   cached?: boolean;
   generated_at?: string;
 }
