@@ -769,6 +769,28 @@ func (app *App) generateDocumentSuggestions(ctx context.Context, suggestionReque
 				}
 			}
 
+			settingsMutex.RLock()
+			fireflyEnabled := settings.FireflyEnabled
+			settingsMutex.RUnlock()
+			if fireflyEnabled {
+				fireflyDraft, gerr = app.getSuggestedFireflyDraft(ctx, DocumentSuggestion{
+					ID:               documentID,
+					OriginalDocument: doc,
+					SuggestedTitle:   suggestedTitle,
+					SuggestedCorrespondent: suggestedCorrespondent,
+					SuggestedDocumentType:  suggestedDocumentType,
+					SuggestedCreatedDate:   suggestedCreatedDate,
+					SuggestedCustomFields:  suggestedCustomFields,
+				}, docLogger)
+				if gerr != nil {
+					mu.Lock()
+					errorsList = append(errorsList, fmt.Errorf("Document %d: %v", documentID, gerr))
+					mu.Unlock()
+					log.Errorf("Error generating Firefly draft for document %d: %v", documentID, gerr)
+					return
+				}
+			}
+
 			mu.Lock()
 			suggestion := DocumentSuggestion{
 				ID:               documentID,
