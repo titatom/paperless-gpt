@@ -647,6 +647,28 @@ func buildFireflyAttachmentUpload(transactionID, filename string, content []byte
 	header.Set("Content-Type", "application/pdf")
 	part, err := writer.CreatePart(header)
 	if err != nil {
+
+func applyFireflyDraftToDerived(derived fireflyDerivedTransaction, draft FireflyTransactionDraft) fireflyDerivedTransaction {
+	if strings.TrimSpace(draft.Description) != "" {
+		derived.Description = strings.TrimSpace(draft.Description)
+	}
+	if strings.TrimSpace(draft.SourceAccount) != "" {
+		derived.SourceAccount = strings.TrimSpace(draft.SourceAccount)
+	}
+	if strings.TrimSpace(draft.DestinationAccount) != "" {
+		derived.DestinationAccount = strings.TrimSpace(draft.DestinationAccount)
+	}
+	if strings.TrimSpace(draft.Category) != "" {
+		derived.Category = strings.TrimSpace(draft.Category)
+	}
+	if strings.TrimSpace(draft.Budget) != "" {
+		derived.Budget = strings.TrimSpace(draft.Budget)
+	}
+	if strings.TrimSpace(draft.Notes) != "" {
+		derived.Notes = strings.TrimSpace(draft.Notes)
+	}
+	return derived
+}
 		return nil, "", err
 	}
 	if _, err := part.Write(content); err != nil {
