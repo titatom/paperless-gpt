@@ -334,6 +334,7 @@ Paperless GPT 0.7.0 adds explicit, per-document finance actions under **Settings
 
 - Configure Firefly III with an instance URL and Personal Access Token. The PAT is encrypted at rest and is never returned to the frontend; the UI only shows whether a token is configured.
 - Firefly transaction creation uses the existing Firefly transaction journal create API shape, with explicit external reference, notes, source/destination account, currency, category, and budget mapping when configured.
+- Firefly description, account, category, budget, and notes suggestions can be AI-assisted; amount, date, and matching remain deterministic.
 - Map transaction fields from Paperless document data, suggestion data, or custom fields. Amount is required. If no amount mapping is set, Paperless GPT falls back to suggested custom fields whose names include `total`, `amount`, or `price`.
 - Matching is performed before creation. Existing transactions around the document/suggested date are scored by amount, currency, date proximity, and description overlap.
 - A strong unique match is auto-selected. Ambiguous matches require a user choice.
