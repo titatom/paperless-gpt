@@ -233,6 +233,106 @@ func (app *App) getSuggestedTags(
 	filteredTags := []string{}
 	for _, tag := range suggestedTags {
 		for _, availableTag := range availableTags {
+
+func (app *App) getSuggestedFireflyDraft(ctx context.Context, suggestion DocumentSuggestion, logger *logrus.Entry) (FireflyTransactionDraft, error) {
+	likelyLanguage := getLikelyLanguage()
+
+	templateMutex.RLock()
+	defer templateMutex.RUnlock()
+
+	settingsMutex.RLock()
+	availableAccounts := []string{}
+	if strings.TrimSpace(settings.FireflyDefaultSourceAccount) != "" {
+		availableAccounts = append(availableAccounts, settings.FireflyDefaultSourceAccount)
+	}
+	if strings.TrimSpace(settings.FireflyDefaultDestinationAccount) != "" && !strings.EqualFold(settings.FireflyDefaultDestinationAccount, settings.FireflyDefaultSourceAccount) {
+		availableAccounts = append(availableAccounts, settings.FireflyDefaultDestinationAccount)
+	}
+	availableCategory := strings.TrimSpace(settings.FireflyDefaultCategory)
+	availableBudget := strings.TrimSpace(settings.FireflyDefaultBudget)
+	settingsMutex.RUnlock()
+
+	templateData := map[string]interface{}{
+		"Language":          likelyLanguage,
+		"Title":             suggestion.SuggestedTitle,
+		"Content":           suggestion.OriginalDocument.Content,
+		"Correspondent":     suggestion.SuggestedCorrespondent,
+		"DocumentType":      suggestion.SuggestedDocumentType,
+		"CreatedDate":       suggestion.SuggestedCreatedDate,
+		"Amount":            deriveFireflyAmountForPrompt(suggestion),
+		"Currency":          firstNonEmpty(resolveMappedString(suggestion, settings.FireflyCurrencyFieldRef), settings.FireflyDefaultCurrency),
+		"AvailableAccounts":  availableAccounts,
+		"AvailableCategory":  availableCategory,
+		"AvailableBudget":    availableBudget,
+		"CustomFields":       suggestion.SuggestedCustomFields,
+	}
+
+	prompt, err := renderFireflyDraftPrompt(templateData)
+	if err != nil {
+		return FireflyTransactionDraft{}, err
+	}
+	if logger != nil {
+		logger.Debugf("Firefly draft prompt: %s", prompt)
+	}
+	completion, err := app.generateTaskContent(ctx, TaskFireflyDraft, prompt, logger)
+	if err != nil {
+		return FireflyTransactionDraft{}, err
+	}
+	if len(completion.Choices) == 0 {
+		return FireflyTransactionDraft{}, fmt.Errorf("LLM returned no choices for Firefly draft suggestion")
+	}
+
+	draft := parseFireflyTransactionDraft(strings.TrimSpace(completion.Choices[0].Content))
+	draft = normalizeFireflyTransactionDraft(draft, suggestion)
+	return draft, nil
+}
+
+func deriveFireflyAmountForPrompt(suggestion DocumentSuggestion) string {
+	amount, amountString, ok := deriveFireflyAmount(suggestion, settings.FireflyAmountFieldRef)
+	if ok {
+		_ = amount
+		return amountString
+	}
+	return ""
+}
+
+func renderFireflyDraftPrompt(templateData map[string]interface{}) (string, error) {
+	return fmt.Sprintf(`You are drafting Firefly III transaction metadata for a paperless-ngx document.
+Return JSON only with keys: description, source_account, destination_account, category, budget, notes, reason.
+Use the document amount/date as ground truth when present. Do not invent an amount or date.
+Prefer concise, human-readable descriptions and choose from existing accounts/categories when possible.
+
+Language: %v
+Title: %v
+Correspondent: %v
+Document type: %v
+Created date: %v
+Amount: %v
+Currency: %v
+Available accounts: %v
+Default category: %v
+Default budget: %v
+Custom fields: %v`, templateData["Language"], templateData["Title"], templateData["Correspondent"], templateData["DocumentType"], templateData["CreatedDate"], templateData["Amount"], templateData["Currency"], templateData["AvailableAccounts"], templateData["AvailableCategory"], templateData["AvailableBudget"], templateData["CustomFields"]), nil
+}
+
+func parseFireflyTransactionDraft(raw string) FireflyTransactionDraft {
+	var draft FireflyTransactionDraft
+	cleaned := stripReasoning(raw)
+	cleaned = strings.TrimSpace(strings.Trim(cleaned, "`"))
+	_ = json.Unmarshal([]byte(cleaned), &draft)
+	return draft
+}
+
+func normalizeFireflyTransactionDraft(draft FireflyTransactionDraft, suggestion DocumentSuggestion) FireflyTransactionDraft {
+	draft.Description = firstNonEmpty(draft.Description, suggestion.SuggestedTitle, suggestion.OriginalDocument.Title)
+	draft.SourceAccount = strings.TrimSpace(draft.SourceAccount)
+	draft.DestinationAccount = strings.TrimSpace(draft.DestinationAccount)
+	draft.Category = strings.TrimSpace(draft.Category)
+	draft.Budget = strings.TrimSpace(draft.Budget)
+	draft.Notes = strings.TrimSpace(draft.Notes)
+	draft.Reason = strings.TrimSpace(draft.Reason)
+	return draft
+}
 			if strings.EqualFold(tag, availableTag) {
 				filteredTags = append(filteredTags, availableTag)
 				break
