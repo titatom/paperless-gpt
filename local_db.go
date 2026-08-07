@@ -103,6 +103,7 @@ type AIProviderSetting struct {
 	Enabled         bool   `gorm:"not null;default:false"`
 	BaseURL         string `gorm:"size:2048"`
 	DefaultModel    string `gorm:"size:255"`
+	OCRModel        string `gorm:"size:255"`
 	EncryptedAPIKey string `gorm:"type:TEXT"`
 	TaskModelsJSON  string `gorm:"type:TEXT"`
 	CreatedAt       time.Time

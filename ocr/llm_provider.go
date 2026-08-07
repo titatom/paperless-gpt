@@ -78,6 +78,25 @@ func newLLMProvider(config Config) (*LLMProvider, error) {
 	}, nil
 }
 
+// NewLLMProviderWithModel creates an LLMProvider with a pre-configured LLM model
+func NewLLMProviderWithModel(llm llms.Model, config Config) (*LLMProvider, error) {
+	logger := log.WithFields(logrus.Fields{
+		"provider": "custom",
+		"model":    config.VisionLLMModel,
+	})
+	logger.Info("Creating new LLM OCR provider with pre-configured model")
+	
+	return &LLMProvider{
+		provider:    config.VisionLLMProvider,
+		model:       config.VisionLLMModel,
+		llm:         llm,
+		prompt:      config.VisionLLMPrompt,
+		maxTokens:   config.VisionLLMMaxTokens,
+		temperature: config.VisionLLMTemperature,
+		ollamaTopK:  config.OllamaOcrTopK,
+	}, nil
+}
+
 func (p *LLMProvider) ProcessImage(ctx context.Context, imageContent []byte, pageNumber int) (*OCRResult, error) {
 	logger := log.WithFields(logrus.Fields{
 		"provider": p.provider,

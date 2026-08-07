@@ -317,9 +317,30 @@ func main() {
 	if providerType == "llm" && visionLlmProvider == "" {
 		log.Warn("OCR provider is set to LLM, but no VISION_LLM_PROVIDER is set. Disabling OCR.")
 	} else {
-		ocrProvider, err = ocr.NewProvider(ocrConfig)
-		if err != nil {
-			log.Fatalf("Failed to initialize OCR provider: %v", err)
+		// First, try to use OCR settings from the UI configuration (OpenRouter only)
+		var ocrProviderFromSettings ocr.Provider
+		var errFromSettings error
+
+		// Attempt to get OCR LLM from UI settings using the standalone helper
+		if llm, model, err := resolveOCRLLMFromSettings(context.Background(), database); err == nil && llm != nil {
+			log.Info("Using OCR provider from UI settings")
+			// Create a special OCR config for the pre-configured LLM
+			ocrFromSettingsConfig := ocrConfig
+			ocrFromSettingsConfig.VisionLLMModel = model
+			ocrFromSettingsConfig.VisionLLMProvider = "openrouter" // Set provider to indicate settings path
+
+			// Create a provider using the pre-configured LLM
+			ocrProviderFromSettings, errFromSettings = ocr.NewLLMProviderWithModel(llm, ocrFromSettingsConfig)
+		}
+
+		// If settings-configured OCR is available, use it; otherwise use the original env-var path
+		if ocrProviderFromSettings != nil && errFromSettings == nil {
+			ocrProvider = ocrProviderFromSettings
+		} else {
+			ocrProvider, err = ocr.NewProvider(ocrConfig)
+			if err != nil {
+				log.Fatalf("Failed to initialize OCR provider: %v", err)
+			}
 		}
 
 		// Validate OCR provider and processing mode compatibility

@@ -58,6 +58,7 @@ type AIProviderConfig struct {
 	BaseURL      string            `json:"base_url,omitempty"`
 	APIKey       string            `json:"-"`
 	DefaultModel string            `json:"default_model"`
+	OCRModel     string            `json:"ocr_model"`
 	TaskModels   map[string]string `json:"task_models"`
 	Source       string            `json:"source,omitempty"`
 }
@@ -80,6 +81,7 @@ type AIProviderSettingsResponse struct {
 	Enabled          bool              `json:"enabled"`
 	BaseURL          string            `json:"base_url"`
 	DefaultModel     string            `json:"default_model"`
+	OCRModel         string            `json:"ocr_model"`
 	APIKeyConfigured bool              `json:"api_key_configured"`
 	TaskModels       map[string]string `json:"task_models"`
 	Source           string            `json:"source,omitempty"`
@@ -90,6 +92,7 @@ type AIProviderSettingsRequest struct {
 	Enabled      bool              `json:"enabled"`
 	BaseURL      string            `json:"base_url"`
 	DefaultModel string            `json:"default_model"`
+	OCRModel     string            `json:"ocr_model"`
 	APIKey       string            `json:"api_key"`
 	TaskModels   map[string]string `json:"task_models"`
 }
@@ -279,6 +282,99 @@ func (app *App) getLLMForTask(ctx context.Context, task string) (llms.Model, str
 	return llm, model, err
 }
 
+// resolveOCRLLMFromSettings queries the AIProviderSetting table directly and resolves OCR LLM settings
+// This is a standalone helper function that doesn't depend on the App instance
+func resolveOCRLLMFromSettings(ctx context.Context, database *gorm.DB) (llms.Model, string, error) {
+	if database == nil {
+		return nil, "", nil
+	}
+
+	var settings []AIProviderSetting
+	err := database.WithContext(ctx).
+		Where("enabled = ?", true).
+		Order("updated_at DESC, id DESC").
+		Find(&settings).Error
+	if err != nil {
+		return nil, "", err
+	}
+
+	for _, setting := range settings {
+		provider, err := normalizeUIProvider(setting.Provider)
+		if err != nil {
+			continue
+		}
+		setting.Provider = provider
+		if setting.DefaultModel != "" || setting.BaseURL != "" || setting.EncryptedAPIKey != "" {
+			// Only proceed if the provider is OpenRouter
+			if provider == AIProviderOpenRouter {
+				taskModels := map[string]string{}
+				if strings.TrimSpace(setting.TaskModelsJSON) != "" {
+					if err := json.Unmarshal([]byte(setting.TaskModelsJSON), &taskModels); err != nil {
+						return nil, "", fmt.Errorf("invalid task model settings: %w", err)
+					}
+					taskModels, err = normalizeTaskModels(taskModels)
+					if err != nil {
+						return nil, "", err
+					}
+				}
+				apiKey := ""
+				if setting.EncryptedAPIKey != "" {
+					decrypted, err := DecryptSecret(setting.EncryptedAPIKey)
+					if err != nil {
+						return nil, "", fmt.Errorf("failed to decrypt AI provider API key: %w", err)
+					}
+					apiKey = decrypted
+				}
+				baseURL := strings.TrimSpace(setting.BaseURL)
+				if baseURL == "" {
+					baseURL = defaultBaseURLForProvider(setting.Provider)
+				}
+
+				cfg := &AIProviderConfig{
+					Provider:     setting.Provider,
+					BaseURL:      baseURL,
+					APIKey:       apiKey,
+					DefaultModel: strings.TrimSpace(setting.DefaultModel),
+					OCRModel:     strings.TrimSpace(setting.OCRModel), // Include OCR model
+					TaskModels:   taskModels,
+					Source:       "ui",
+				}
+
+				// Use OCRModel if set, otherwise fallback to DefaultModel
+				model := cfg.OCRModel
+				if model == "" {
+					model = cfg.DefaultModel
+				}
+
+				if model != "" {
+					// Build the OpenRouter LLM directly using the same logic as buildLLMFromConfig
+					if cfg.APIKey == "" {
+						return nil, "", errors.New("OpenRouter API key is not set")
+					}
+					baseURL := strings.TrimSpace(cfg.BaseURL)
+					if baseURL == "" {
+						baseURL = defaultBaseURLForProvider(AIProviderOpenRouter)
+					}
+					llm, err := openai.New(
+						openai.WithModel(model),
+						openai.WithToken(cfg.APIKey),
+						openai.WithBaseURL(baseURL),
+						openai.WithHTTPClient(createOpenRouterHTTPClient()),
+					)
+					if err != nil {
+						return nil, "", err
+					}
+					return NewRateLimitedLLM(llm, getRateLimitConfig(false)), model, nil
+				}
+			}
+			break // Found an enabled provider but it wasn't OpenRouter, so we stop looking
+		}
+	}
+
+	// Return nil to indicate no settings-configured OCR provider, so caller should fallback to env vars
+	return nil, "", nil
+}
+
 func (app *App) getOrCreateConfiguredLLM(ctx context.Context, cfg *AIProviderConfig, model string) (llms.Model, error) {
 	cacheKey := llmCacheKey(cfg, model)
 	if app.llmCache != nil {
@@ -439,6 +535,7 @@ func (app *App) aiProviderSettingResponse(ctx context.Context, setting AIProvide
 		Enabled:          setting.Enabled,
 		BaseURL:          setting.BaseURL,
 		DefaultModel:     setting.DefaultModel,
+		OCRModel:         setting.OCRModel,
 		APIKeyConfigured: setting.EncryptedAPIKey != "",
 		TaskModels:       taskModels,
 		Source:           "ui",
@@ -464,6 +561,7 @@ func (app *App) getAIProviderSettings(ctx context.Context) (AIProviderSettingsRe
 		Enabled:          false,
 		BaseURL:          cfg.BaseURL,
 		DefaultModel:     cfg.DefaultModel,
+		OCRModel:         cfg.OCRModel, // Include OCRModel from env config
 		APIKeyConfigured: cfg.APIKey != "",
 		TaskModels:       map[string]string{},
 		Source:           "env",
@@ -491,6 +589,7 @@ func (app *App) saveAIProviderSettings(ctx context.Context, req AIProviderSettin
 	setting.Enabled = req.Enabled
 	setting.BaseURL = strings.TrimSpace(req.BaseURL)
 	setting.DefaultModel = strings.TrimSpace(req.DefaultModel)
+	setting.OCRModel = strings.TrimSpace(req.OCRModel) // Add OCR model
 	setting.TaskModelsJSON = taskJSON
 	if strings.TrimSpace(req.APIKey) != "" {
 		encrypted, err := EncryptSecret(strings.TrimSpace(req.APIKey))

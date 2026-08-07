@@ -29,6 +29,7 @@ interface AIProviderSettings {
   enabled: boolean;
   base_url: string;
   default_model: string;
+  ocr_model: string;
   api_key_configured: boolean;
   task_models: Record<string, string>;
   source?: string;
@@ -39,6 +40,7 @@ const emptySettings: AIProviderSettings = {
   enabled: false,
   base_url: "",
   default_model: "",
+  ocr_model: "",  // Add OCR model field
   api_key_configured: false,
   task_models: {},
 };
@@ -97,6 +99,7 @@ const AIProvidersEditor: React.FC = () => {
     enabled: settings.enabled,
     base_url: settings.base_url,
     default_model: settings.default_model,
+    ocr_model: settings.ocr_model,
     api_key: apiKey,
     task_models: settings.task_models,
   });
@@ -207,6 +210,17 @@ const AIProvidersEditor: React.FC = () => {
             value={settings.default_model}
             placeholder={defaults.model}
             onChange={(e) => setSettings((current) => ({ ...current, default_model: e.target.value }))}
+            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">OCR model</span>
+          <input
+            type="text"
+            value={settings.ocr_model}
+            placeholder="Use default model"
+            onChange={(e) => setSettings((current) => ({ ...current, ocr_model: e.target.value }))}
             className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
         </label>
