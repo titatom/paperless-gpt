@@ -135,7 +135,7 @@ func (p *LLMProvider) ProcessImage(ctx context.Context, imageContent []byte, pag
 	var parts []llms.ContentPart
 	var contentPart llms.ContentPart
 
-	if providerName == "openai" || providerName == "mistral" {
+	if providerName == "openai" || providerName == "mistral" || providerName == "openrouter" {
 		logger.Info("Using OpenAI image format")
 		contentPart = llms.ImageURLPart("data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(imageContent))
 	} else if providerName == "googleai" {
