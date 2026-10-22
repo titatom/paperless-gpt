@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,45 +39,173 @@ func (app *App) generateTaskContent(ctx context.Context, task string, prompt str
 	})
 }
 
-// llmDateRegexp matches the first ISO-like date in an LLM response, allowing
-// 1- or 2-digit month/day and either '-' or '/' separators. The regex is
-// intentionally lenient — we normalize the captured groups into the strict
-// YYYY-MM-DD format below.
-var llmDateRegexp = regexp.MustCompile(`(\d{4})[-/](\d{1,2})[-/](\d{1,2})`)
+// llmYearFirstDateRegexp matches a year-first date (YYYY-M-D, YYYY/M/D, or
+// YYYY.M.D). Year-first dates are unambiguous and always win over other
+// formats, so we search for them first. Both separators are captured and must
+// be identical (verified in code, since RE2 has no backreferences).
+var llmYearFirstDateRegexp = regexp.MustCompile(`\b(\d{4})([-/.])(\d{1,2})([-/.])(\d{1,2})\b`)
+
+// llmDayFirstDateRegexp matches a day-first or month-first date
+// (D-M-YYYY, D.M.YYYY, D/M/YYYY, or M-D-YYYY, etc.). Both separators are
+// captured and must be identical (verified in code, since RE2 has no
+// backreferences). Ambiguity is resolved below based on the magnitude of the
+// components and the separator used.
+var llmDayFirstDateRegexp = regexp.MustCompile(`\b(\d{1,2})([-/.])(\d{1,2})([-/.])(\d{4})\b`)
+
+// llmTextualDateRegexp matches dates written with textual month names, in
+// either "5 October 2023", "5th October 2023", "October 5, 2023", or
+// "Oct 5, 2023" style. It also tolerates trailing periods on abbreviations
+// (e.g. "Oct. 5, 2023") and optional ordinal suffixes.
+var llmTextualDateRegexp = regexp.MustCompile(`(?i)\b(?:(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\.?\s+(\d{4})|([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4}))\b`)
+
+// createdDateRetryInstruction is appended to the prompt when the first LLM
+// response for the created date task cannot be parsed. Tokens for it are
+// reserved up front so the retry prompt also stays within the token limit.
+const createdDateRetryInstruction = "\n\nRespond with ONLY the date in YYYY-MM-DD format. Do not include any other text, punctuation, or formatting."
+
+// monthNumber converts an English month name or abbreviation (case-insensitive,
+// with or without a trailing period) to its 1-based month number, or 0 if the
+// name is not a recognized month.
+func monthNumber(name string) int {
+	switch strings.ToLower(strings.TrimSuffix(name, ".")) {
+	case "jan", "january":
+		return 1
+	case "feb", "february":
+		return 2
+	case "mar", "march":
+		return 3
+	case "apr", "april":
+		return 4
+	case "may":
+		return 5
+	case "jun", "june":
+		return 6
+	case "jul", "july":
+		return 7
+	case "aug", "august":
+		return 8
+	case "sep", "sept", "september":
+		return 9
+	case "oct", "october":
+		return 10
+	case "nov", "november":
+		return 11
+	case "dec", "december":
+		return 12
+	}
+	return 0
+}
+
+// buildCandidate formats and validates a year/month/day triple into the strict
+// YYYY-MM-DD string expected by the HTML <input type="date"> control, or ""
+// if the combination is not a valid calendar date.
+func buildCandidate(year string, month int, day int) string {
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return ""
+	}
+	candidate := fmt.Sprintf("%s-%02d-%02d", year, month, day)
+	if _, err := time.Parse("2006-01-02", candidate); err != nil {
+		return ""
+	}
+	return candidate
+}
 
 // normalizeSuggestedCreatedDate cleans up an LLM date response and returns a
 // strict YYYY-MM-DD string, or "" if no valid date could be extracted.
 //
 // LLMs frequently violate "respond only with YYYY-MM-DD" by wrapping the
 // answer in code fences, prose, quotes, or trailing punctuation; or by using
-// non-zero-padded months/days. The HTML <input type="date"> control silently
-// ignores any value that isn't a strict YYYY-MM-DD, so we have to normalize
-// before handing it to the front-end.
+// non-zero-padded months/days, alternative separators (- / .), day-first or
+// month-first ordering, or textual month names. The HTML <input type="date">
+// control silently ignores any value that isn't a strict YYYY-MM-DD, so we
+// have to normalize before handing it to the front-end.
+//
+// Disambiguation rules for numeric dates:
+//   - Year-first (e.g. 2023-05-10) always wins: it is unambiguous.
+//   - If the first component is > 12 it must be a day, so we treat the date
+//     as day-first (e.g. 31/12/2023).
+//   - If the second component is > 12 it must be a day, so we treat the date
+//     as month-first (e.g. 10/25/2023).
+//   - If both components are <= 12 the date is ambiguous. We prefer day-first
+//     for slash and dot separators (European style, e.g. 05/10/2023 or
+//     05.10.2023) and month-first for dash separators (e.g. 05-10-2023).
 func normalizeSuggestedCreatedDate(raw string) string {
 	cleaned := stripReasoning(raw)
 	cleaned = stripMarkdown(cleaned)
 	cleaned = strings.TrimSpace(cleaned)
 	cleaned = strings.Trim(cleaned, "\"'`")
 
-	match := llmDateRegexp.FindStringSubmatch(cleaned)
-	if len(match) != 4 {
-		return ""
+	// 1. Year-first (ISO-like) dates always win over other formats.
+	for _, match := range llmYearFirstDateRegexp.FindAllStringSubmatch(cleaned, -1) {
+		if match[2] != match[4] {
+			// Mixed separators (e.g. "2023-05/10") are not a date.
+			continue
+		}
+		month, _ := strconv.Atoi(match[3])
+		day, _ := strconv.Atoi(match[5])
+		if candidate := buildCandidate(match[1], month, day); candidate != "" {
+			return candidate
+		}
 	}
-	year := match[1]
-	month := match[2]
-	if len(month) == 1 {
-		month = "0" + month
-	}
-	day := match[3]
-	if len(day) == 1 {
-		day = "0" + day
-	}
-	candidate := fmt.Sprintf("%s-%s-%s", year, month, day)
 
-	if _, err := time.Parse("2006-01-02", candidate); err != nil {
-		return ""
+	// 2. Day-first / month-first numeric dates.
+	for _, match := range llmDayFirstDateRegexp.FindAllStringSubmatch(cleaned, -1) {
+		if match[2] != match[4] {
+			// Mixed separators (e.g. "12-15/2023") are not a date.
+			continue
+		}
+		first, _ := strconv.Atoi(match[1])
+		second, _ := strconv.Atoi(match[3])
+		separator := match[2]
+
+		var day, month int
+		switch {
+		case first > 12 && second <= 12:
+			// First component can only be a day.
+			day, month = first, second
+		case second > 12 && first <= 12:
+			// Second component can only be a day, so the first is the month.
+			day, month = second, first
+		case first <= 12 && second <= 12:
+			// Genuinely ambiguous: prefer day-first for slash/dot separators
+			// (European style) and month-first for dashes.
+			if separator == "/" || separator == "." {
+				day, month = first, second
+			} else {
+				day, month = second, first
+			}
+		default:
+			// Both components > 12: neither can be a month.
+			continue
+		}
+
+		if candidate := buildCandidate(match[5], month, day); candidate != "" {
+			return candidate
+		}
 	}
-	return candidate
+
+	// 3. Textual month-name dates ("5 October 2023", "October 5, 2023", ...).
+	for _, match := range llmTextualDateRegexp.FindAllStringSubmatch(cleaned, -1) {
+		var day, month, year string
+		if match[1] != "" {
+			// "5 October 2023" / "5th October 2023" shape.
+			day, month, year = match[1], strconv.Itoa(monthNumber(match[2])), match[3]
+		} else {
+			// "October 5, 2023" / "Oct 5, 2023" shape.
+			month, day, year = strconv.Itoa(monthNumber(match[4])), match[5], match[6]
+		}
+		m, _ := strconv.Atoi(month)
+		d, _ := strconv.Atoi(day)
+		if m == 0 {
+			// The word we captured was not actually a month name; keep looking.
+			continue
+		}
+		if candidate := buildCandidate(year, m, d); candidate != "" {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 // getSuggestedCorrespondent generates a suggested correspondent for a document using the LLM
@@ -383,6 +512,17 @@ func (app *App) getSuggestedCreatedDate(ctx context.Context, title string, conte
 		return "", fmt.Errorf("error calculating available tokens: %v", err)
 	}
 
+	// Reserve tokens for the retry instruction so that even if we have to ask
+	// the LLM again, the retry prompt still fits within the token limit.
+	if tokenLimit > 0 {
+		if retryTokens, err := getTokenCount(createdDateRetryInstruction); err == nil {
+			availableTokens -= retryTokens
+			if availableTokens < 0 {
+				availableTokens = 0
+			}
+		}
+	}
+
 	// Truncate content if needed
 	truncatedContent, err := truncateContentByTokens(content, availableTokens)
 	if err != nil {
@@ -412,7 +552,22 @@ func (app *App) getSuggestedCreatedDate(ctx context.Context, title string, conte
 	raw := completion.Choices[0].Content
 	normalized := normalizeSuggestedCreatedDate(raw)
 	if normalized == "" {
-		logger.Warnf("LLM returned an unparseable created date; ignoring. Raw response: %q", raw)
+		// The first response wasn't parseable; give the model one more shot
+		// with a stricter instruction appended to the original prompt.
+		logger.Warnf("LLM returned an unparseable created date (%q); retrying with stricter instruction", raw)
+		retryPrompt := fmt.Sprintf("%s%s", prompt, createdDateRetryInstruction)
+		retryCompletion, err := app.generateTaskContent(ctx, TaskCreatedDate, retryPrompt, logger)
+		if err != nil {
+			return "", fmt.Errorf("error getting retry response from LLM: %v", err)
+		}
+		if len(retryCompletion.Choices) == 0 {
+			return "", fmt.Errorf("LLM returned no choices for created date suggestion retry")
+		}
+		retryRaw := retryCompletion.Choices[0].Content
+		normalized = normalizeSuggestedCreatedDate(retryRaw)
+		if normalized == "" {
+			logger.Warnf("LLM returned an unparseable created date on retry; ignoring. Raw response: %q", retryRaw)
+		}
 	}
 	return normalized, nil
 }

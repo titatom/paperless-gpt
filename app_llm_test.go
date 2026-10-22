@@ -18,8 +18,14 @@ import (
 // Mock LLM for testing
 type mockLLM struct {
 	lastPrompt string
-	Response   string
-	Error      error
+	// Response is the response to return for every call (kept for backward
+	// compatibility with existing tests).
+	Response string
+	// Responses is an optional sequence of responses returned in order, one
+	// per call. Once exhausted, the last response is repeated.
+	Responses []string
+	callCount int
+	Error     error
 }
 
 func (m *mockLLM) CreateEmbedding(_ context.Context, texts []string) ([][]float32, error) {
@@ -43,13 +49,20 @@ func (m *mockLLM) GenerateContent(ctx context.Context, messages []llms.MessageCo
 			m.lastPrompt = textContent.Text
 		}
 	}
+	m.callCount++
 
 	if m.Error != nil {
 		return nil, m.Error
 	}
 
 	content := "test response"
-	if m.Response != "" {
+	if len(m.Responses) > 0 {
+		idx := m.callCount - 1
+		if idx >= len(m.Responses) {
+			idx = len(m.Responses) - 1
+		}
+		content = m.Responses[idx]
+	} else if m.Response != "" {
 		content = m.Response
 	}
 
@@ -443,11 +456,30 @@ func TestNormalizeSuggestedCreatedDate(t *testing.T) {
 		{"with prose prefix", "The document was created on 2024-03-12.", "2024-03-12"},
 		{"non-zero-padded", "2024-3-9", "2024-03-09"},
 		{"slashes", "2024/03/12", "2024-03-12"},
+		{"dotted", "2024.03.12", "2024-03-12"},
 		{"trailing period", "2024-03-12.", "2024-03-12"},
+		{"year-first non-zero-padded dashes", "2023-05-10", "2023-05-10"},
+		{"year-first non-zero-padded slashes", "2023/5/9", "2023-05-09"},
+		{"year-first non-zero-padded dots", "2023.5.9", "2023-05-09"},
+		{"year-first single-digit month and day dashes", "2023-5-9", "2023-05-09"},
+		{"day-first slashes", "05/10/2023", "2023-10-05"},
+		{"day-first dots", "05.10.2023", "2023-10-05"},
+		{"day-first unambiguous day", "31/12/2023", "2023-12-31"},
+		{"month-first unambiguous day", "10/25/2023", "2023-10-25"},
+		{"day-first dashes", "31-12-2023", "2023-12-31"},
+		{"textual day month year", "5 October 2023", "2023-10-05"},
+		{"textual ordinal day month year", "5th October 2023", "2023-10-05"},
+		{"textual month day year", "October 5, 2023", "2023-10-05"},
+		{"textual month day year abbreviation", "Oct 5, 2023", "2023-10-05"},
+		{"textual date in prose", "I believe the letter was written on 5 October 2023 by John.", "2023-10-05"},
+		{"day-first in prose", "The date is 10/25/2023 according to the letter.", "2023-10-25"},
+		{"quoted textual date", "He said \"5 October 2023\" when asked.", "2023-10-05"},
 		{"empty input", "", ""},
 		{"no date in text", "I don't know", ""},
 		{"invalid month", "2024-13-12", ""},
 		{"invalid day", "2024-02-31", ""},
+		{"invalid both numeric components", "13/13/2023", ""},
+		{"invalid year-first month and day", "2023-13-13", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -455,6 +487,58 @@ func TestNormalizeSuggestedCreatedDate(t *testing.T) {
 			assert.Equal(t, tc.expected, got)
 		})
 	}
+}
+
+func TestGetSuggestedCreatedDateRetryOnUnparseableResponse(t *testing.T) {
+	testLogger := logrus.WithField("test", "test")
+
+	// Save current env and restore after test; disable token limiting so the
+	// fixtures below are never truncated.
+	originalLimit := os.Getenv("TOKEN_LIMIT")
+	defer os.Setenv("TOKEN_LIMIT", originalLimit)
+	os.Unsetenv("TOKEN_LIMIT")
+	resetTokenLimit()
+
+	var err error
+	createdDateTemplate, err = template.New("created_date").Parse(testCreatedDateContentTemplate)
+	require.NoError(t, err)
+
+	t.Run("retries once and uses second response", func(t *testing.T) {
+		mockLLM := &mockLLM{
+			Responses: []string{"I think it was created a while ago", "2023-05-10"},
+		}
+		app := &App{LLM: mockLLM}
+
+		got, err := app.getSuggestedCreatedDate(context.Background(), "Test document title", "Some content", testLogger)
+		require.NoError(t, err)
+		assert.Equal(t, "2023-05-10", got)
+		assert.Equal(t, 2, mockLLM.callCount, "should retry exactly once")
+		assert.Contains(t, mockLLM.lastPrompt, "Respond with ONLY the date in YYYY-MM-DD format", "retry should use a stricter instruction")
+	})
+
+	t.Run("no retry when first response parses", func(t *testing.T) {
+		mockLLM := &mockLLM{
+			Responses: []string{"2023-05-10", "should never be reached"},
+		}
+		app := &App{LLM: mockLLM}
+
+		got, err := app.getSuggestedCreatedDate(context.Background(), "Test document title", "Some content", testLogger)
+		require.NoError(t, err)
+		assert.Equal(t, "2023-05-10", got)
+		assert.Equal(t, 1, mockLLM.callCount, "should not retry when the first response parses")
+	})
+
+	t.Run("returns empty when both responses are unparseable", func(t *testing.T) {
+		mockLLM := &mockLLM{
+			Responses: []string{"I cannot determine the date", "Still no idea, sorry"},
+		}
+		app := &App{LLM: mockLLM}
+
+		got, err := app.getSuggestedCreatedDate(context.Background(), "Test document title", "Some content", testLogger)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+		assert.Equal(t, 2, mockLLM.callCount, "should retry exactly once before giving up")
+	})
 }
 
 // mockPaperlessClient is a mock implementation of the ClientInterface for testing.
